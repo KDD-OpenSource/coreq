@@ -1,17 +1,16 @@
 from distutils.core import setup, Extension
 import numpy
 
-mod = Extension('coreq',
+mod = Extension('BlockCorr',
     include_dirs = [numpy.get_include()],
-    sources = ['coreq.c', 'list.c'],
-    extra_compile_args=['-fopenmp'],
+    sources = ['BlockCorr.c', 'list.c'],
+    extra_compile_args=['-fopenmp','-O3','-march=native','-mavx','-funroll-loops'],
+    #extra_compile_args=['-fopenmp','-g','-pg'],
     extra_link_args=['-lgomp']
 )
 
-setup (name = 'coreq',
+setup (name = 'BlockCorr',
     author = 'Erik Scharwaechter',
     author_email = 'erik.scharwaechter@hpi.de',
-    description = 'COREQ: Low redundancy estimation of correlation matrices',
-    version = '0.3',
     ext_modules = [mod]
 )

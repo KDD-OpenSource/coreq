@@ -1,5 +1,5 @@
 /* vim:set ts=8 sw=2 sts=2 noet:  */
-/*
+/* 
    Linked list data type
    Copyright (C) 2017  Erik Scharwaechter <erik.scharwaechter@hpi.de>
    Copyright (C) 2015  Erik Scharwaechter <erik.scharwaechter@rwth-aachen.de>
@@ -45,6 +45,9 @@ void llist_double_print(llist_double *llist);
 int llist_double_push_back(llist_double *llist, double data);
 long int llist_double_size(llist_double *llist);
 double llist_double_back(llist_double *llist);
+double llist_double_front(llist_double *llist);
+//int llist_double_relink(llist_item_double *item, llist_double *from, llist_double *to);
+//int llist_double_relink_all(llist_double *from, llist_double *to);
 
 
 // UNSIGNED LONG INT
@@ -67,6 +70,7 @@ void llist_ul_print(llist_ul *llist);
 int llist_ul_push_back(llist_ul *llist, unsigned long data);
 long int llist_ul_size(llist_ul *llist);
 unsigned long llist_ul_back(llist_ul *llist);
+unsigned long llist_ul_front(llist_ul *llist);
 int llist_ul_relink(llist_item_ul *item, llist_ul *from, llist_ul *to);
 int llist_ul_relink_all(llist_ul *from, llist_ul *to);
 
@@ -91,3 +95,7 @@ void llist_ptr_print(llist_ptr *llist);
 int llist_ptr_push_back(llist_ptr *llist, void *data);
 long int llist_ptr_size(llist_ptr *llist);
 void *llist_ptr_back(llist_ptr *llist);
+void *llist_ptr_front(llist_ptr *llist);
+//int llist_ptr_relink(llist_item_ptr *item, llist_ptr *from, llist_ptr *to);
+//int llist_ptr_relink_all(llist_ptr *from, llist_ptr *to);
+

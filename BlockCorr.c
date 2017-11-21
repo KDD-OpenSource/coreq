@@ -1,33 +1,7 @@
-/* vim:set ts=8 sw=2 sts=2 noet:  */
-
-/*
-Copyright (C) 2017 Erik Scharwaechter <erik.scharwaechter@hpi.de>
--- based on the code of CorrCoef (https://github.com/UP-RS-ESP/CorrCoef)
--- Copyright (C) 2016 Rheinwalt
-
-The MIT License (MIT)
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-*/
-
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
+#include "Python.h"
+#include "numpy/arrayobject.h"
 #include <fcntl.h>
 #include <math.h>
 #include <omp.h>
@@ -35,51 +9,36 @@ SOFTWARE.
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/mman.h>
-#include <Python.h>
-#include <numpy/arrayobject.h>
 #include "list.h"
 
 #define VERSION "0.3"
+#include "BlockCorr.h"
 
 // compute pearson correlation coefficient between time series at positions i1 and i2 in d (of length l)
 // NOTE: result may be nan, if the variance of any of the time series is zero, or if
 // any of the time series contains nans
-double pearson2(const double *d, const unsigned long i1, const unsigned long i2, const unsigned long l) {
-  unsigned int i;
-  double mean1, mean2, var1, var2, cov;
-
-  // compute means
-  mean1 = 0.0; mean2 = 0.0;
-  for (i = 0; i < l; i++) {
-    mean1 += d[i1*l+i]; mean2 += d[i2*l+i];
+double pearson2(const double *d, const unsigned long i, const unsigned long j, const unsigned long l) {
+  unsigned int k;
+  double sum_i = 0.0, sum_j = 0.0, sum_ii = 0.0, sum_jj = 0.0, sum_ij = 0.0;
+#pragma omp simd
+  for (k = 0; k < l; k++) {
+    sum_i += d[i*l+k];
+    sum_j += d[j*l+k];
+    sum_ii += d[i*l+k]*d[i*l+k];
+    sum_jj += d[j*l+k]*d[j*l+k];
+    sum_ij += d[i*l+k]*d[j*l+k];
   }
-  mean1 /= l; mean2 /= l;
-
-  // compute variances and covariance
-  var1 = 0.0; var2 = 0.0;
-  cov = 0.0;
-  for (i = 0; i < l; i++) {
-    var1 += (d[i1*l+i]-mean1)*(d[i1*l+i]-mean1);
-    var2 += (d[i2*l+i]-mean2)*(d[i2*l+i]-mean2);
-    cov += (d[i1*l+i]-mean1)*(d[i2*l+i]-mean2);
-  }
-  var1 /= (l-1); var2 /= (l-1); cov /= (l-1); // denominators don't really matter
-
-  // compute correlation
-  return cov/(sqrt(var1)*sqrt(var2));
+  return (l*sum_ij-sum_i*sum_j)/sqrt((l*sum_ii-sum_i*sum_i)*(l*sum_jj-sum_j*sum_j));
 }
 
 // compute n-by-n correlation matrix for complete data set d with n rows and l columns
-PyArrayObject *
-pearson(const double *d, unsigned long n, unsigned long l) {
-  PyArrayObject *coef;
-  long int dim[2];
+double *pearson(const double *d, unsigned long n, unsigned long l) {
   long int ij, i, j;
+  double *coef;
 
-  dim[0] = n; dim[1] = n;
-  coef = (PyArrayObject *) PyArray_ZEROS(2, dim, NPY_DOUBLE, 0);
-  if(!coef) {
-    PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
+  // allocate memory
+  coef = calloc(n*n, sizeof (double));
+  if (!coef) {
     return NULL;
   }
 
@@ -87,7 +46,9 @@ pearson(const double *d, unsigned long n, unsigned long l) {
   for (ij = 0; ij < n*n; ij++) {
       i = ij/n;
       j = ij%n;
-      (*(double *) PyArray_GETPTR2(coef, i, j)) = pearson2(d, i, j, l);
+      if (i > j) continue;
+      coef[i*n+j] = pearson2(d, i, j, l);
+      coef[j*n+i] = coef[i*n+j];
   }
 
   return coef;
@@ -96,7 +57,7 @@ pearson(const double *d, unsigned long n, unsigned long l) {
 // compute upper triangular part of the correlation matrix
 // and store as a vector of length n*(n+1)/2
 //
-// original code by Rheinwalt
+// original code by Aljoscha Rheinwalt
 // adapted by Erik Scharwächter
 //
 // d: data array with n rows and l columns
@@ -286,6 +247,29 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
       iter_ul = iter_ul_next;
     }
 
+#ifdef DEBUG
+    llist_item_ul *tmp_iter1;
+    llist_item_ul *tmp_iter2;
+    tmp_iter1 = clustermemb_pos_l->first;
+    while (tmp_iter1) {
+      tmp_iter2 = tmp_iter1;
+      while (tmp_iter2) {
+        printf("pos %ld %ld %.2f\n", tmp_iter1->data, tmp_iter2->data, pearson2(d, tmp_iter1->data, tmp_iter2->data, l));
+        tmp_iter2 = tmp_iter2->next;
+      }
+      tmp_iter1 = tmp_iter1->next;
+    }
+    tmp_iter1 = clustermemb_neg_l->first;
+    while (tmp_iter1) {
+      tmp_iter2 = tmp_iter1;
+      while (tmp_iter2) {
+        printf("neg %ld %ld %.2f\n", tmp_iter1->data, tmp_iter2->data, pearson2(d, tmp_iter1->data, tmp_iter2->data, l));
+        tmp_iter2 = tmp_iter2->next;
+      }
+      tmp_iter1 = tmp_iter1->next;
+    }
+#endif
+
     // check whether protoclusters fulfill the minimium size constraints
     if (llist_ul_size(clustermemb_pos_l) >= kappa) {
       // add to final clustering
@@ -314,6 +298,9 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
     iter_ul = ((llist_ul *) iter_ptr->data)->first;
     while (iter_ul != NULL) {
       (*(long int *) PyArray_GETPTR1(membs, iter_ul->data)) = i;
+#ifdef DEBUG
+      printf("%ld -> %ld\n", iter_ul->data, i);
+#endif
       iter_ul = iter_ul->next;
     }
     llist_ul_destroy((llist_ul *) iter_ptr->data);
@@ -325,6 +312,226 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
   llist_ul_destroy(&timeseries_l);
 
   return membs;
+}
+
+// assumes that the key really is somewhere in the array
+unsigned long binary_search_ul(unsigned long key, unsigned long *arr, unsigned long len) {
+  unsigned long liml, limr, rpos;
+  liml = 0;
+  limr = len-1;
+  do {
+    rpos = (liml+limr)/2;
+    if (arr[rpos] < key) {
+      liml = rpos + 1;
+    } else if (arr[rpos] > key) {
+      limr = rpos - 1;
+    } else {
+      break; // found it
+    }
+  } while (liml <= limr);
+  return rpos;
+}
+
+// COREQ++
+// find equivalence classes in a time series data set and estimate correlations
+// NOTE: no kappa, no noise cluster estimation, no negative clusters, no NaN handling
+//
+// INPUT
+// d: data set with n rows (time series) and l columns (time steps)
+// n, l: see above
+// alpha: transitivity threshold
+// est_strat: estimation strategy (pivot-based, average-based)
+//
+// OUTPUT
+// membs: uninitialized pointer to array for class memberships
+// pivots: uninitialized pointer to array for pivot indices
+// cluster_corrs: uninitialized pointer to array for class correlations (upper triangular indexing)
+// n_clus: total number of resulting clusters
+// corr_comps: total number of correlation computations required for clustering/estimation
+long int *
+coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_estimation_strategy_t est_strat,
+    long int **membs, long int **pivots, double **cluster_corrs,
+    long int *n_clus, long int *corr_comps)
+{
+  unsigned long pivot, remaining, i, j, k, rpos, sample_size;
+  double rho;
+  llist_ul timeseries_l; // holds all unprocessed time series
+  llist_ul pivot_l; // holds all pivot objects selected so far
+  llist_ul *clustermemb_l; // holds all time series assigned to a cluster
+  llist_ptr cluster_l; // holds all clusters
+  llist_ptr correlations_idx_l; // holds corrs between all pivots and time series (indices)
+  llist_ptr correlations_val_l; // holds corrs between all pivots and time series (correlations)
+  llist_ul  correlations_cnt_l; // holds the number of entries in the previous lists
+  llist_item_ul *iter_ul, *iter_ul_next;
+  llist_item_ptr *iter_ptr, *iter_idx, *iter_val;
+  unsigned long **cluster_arr; // hold all clusters with their members
+  unsigned long *cluster_size_arr; // hold all cluster sizes
+
+  *membs = calloc(n, sizeof(long int));
+  if (!*membs) return NULL;
+
+  // initialize time series index list
+  llist_ul_init(&timeseries_l);
+  for (i = 0; i < n; i++) {
+    llist_ul_push_back(&timeseries_l, i);
+  }
+
+  // initialize lists
+  llist_ptr_init(&cluster_l);
+  llist_ptr_init(&correlations_idx_l);
+  llist_ptr_init(&correlations_val_l);
+  llist_ul_init(&correlations_cnt_l);
+  llist_ul_init(&pivot_l);
+
+  // iterate over all time series until none is left
+  *corr_comps = 0;
+  while (llist_ul_size(&timeseries_l) > 0) {
+    remaining = llist_ul_size(&timeseries_l);
+    printf("\r% 9ld left...", remaining);
+
+    // select pivot time series and create its correlation container
+    pivot = llist_ul_front(&timeseries_l);
+    llist_ul_push_back(&pivot_l, pivot);
+    llist_ptr_push_back(&correlations_idx_l, calloc(remaining, sizeof (unsigned long)));
+    llist_ptr_push_back(&correlations_val_l, calloc(remaining, sizeof (double)));
+    llist_ul_push_back(&correlations_cnt_l, remaining);
+
+    // initialize cluster container
+    clustermemb_l = (llist_ul *) malloc(sizeof (llist_ul));
+    if (!clustermemb_l) return NULL;
+    llist_ul_init(clustermemb_l);
+
+    // compute all correlations between pivot and remaining time series
+    iter_ul = timeseries_l.first;
+    i = 0;
+    while (iter_ul != NULL) {
+      iter_ul_next = iter_ul->next; // store successor before relinking
+
+      // compute correlation
+      rho = pearson2(d, pivot, iter_ul->data, l);
+      (*corr_comps)++;
+      ((unsigned long *) llist_ptr_back(&correlations_idx_l))[i] = iter_ul->data;
+      ((double *) llist_ptr_back(&correlations_val_l))[i] = rho;
+
+      // add time series to cluster
+      if (rho >= alpha) {
+        llist_ul_relink(iter_ul, &timeseries_l, clustermemb_l);
+      }
+
+      iter_ul = iter_ul_next;
+      i++;
+    }
+
+    // add to final clustering
+    llist_ptr_push_back(&cluster_l, clustermemb_l);
+  }
+  *n_clus = llist_ul_size(&pivot_l);
+  printf("\rclustering finished with %ld correlation computations --- %ld clusters detected\n", *corr_comps, *n_clus);
+
+  // prepare output array with cluster assignments
+  // and buffer all clusters in cluster_arr for O(1) access to members
+  cluster_arr = calloc(*n_clus, sizeof (unsigned long *));
+  cluster_size_arr = calloc(*n_clus, sizeof (unsigned long));
+  i = 0;
+  iter_ptr = cluster_l.first;
+  while (iter_ptr != NULL) {
+    cluster_arr[i] = calloc(llist_ul_size((llist_ul *) iter_ptr->data), sizeof (unsigned long));
+    cluster_size_arr[i] = llist_ul_size((llist_ul *) iter_ptr->data);
+    j = 0;
+    iter_ul = ((llist_ul *) iter_ptr->data)->first;
+    while (iter_ul != NULL) {
+      cluster_arr[i][j] = iter_ul->data;
+      (*membs)[iter_ul->data] = i;
+      iter_ul = iter_ul->next;
+      j++;
+    }
+    llist_ul_destroy((llist_ul *) iter_ptr->data);
+    free(iter_ptr->data);
+    iter_ptr = iter_ptr->next;
+    i++;
+  }
+
+  // prepare output array with pivots
+  *pivots = calloc(*n_clus, sizeof (long int));
+  i = 0;
+  iter_ul = pivot_l.first;
+  while (iter_ul != NULL) {
+    (*pivots)[i] = iter_ul->data;
+    iter_ul = iter_ul->next;
+    i++;
+  }
+
+  // prepare output array with correlation estimates in O(K*(K+1)/2 * log2(N) * log2(N))
+  // NOTE: we use binary search to look up the precomputed pivot-time series correlations;
+  // no additional correlation computations are necessary, which would require O(K*(K+1)/2 * T * log2(N))
+  *cluster_corrs = calloc((*n_clus)*(*n_clus+1)/2, sizeof (double));
+  iter_idx = correlations_idx_l.first;
+  iter_val = correlations_val_l.first;
+  iter_ul = correlations_cnt_l.first;
+  for (i = 0; i < (*n_clus); i++) { // loop over all pairs of pivots
+    for (j = i; j < (*n_clus); j++) {
+      switch (est_strat) {
+        case COREQ_PIVOT:
+          // search for pivot j in the correlation index list of pivot i
+          rpos = binary_search_ul((*pivots)[j], ((unsigned long *) iter_idx->data), iter_ul->data);
+          //printf("p%lu=ts%lu@loc%lu(ts%lu):%.2f ", j, (*pivots)[j], rpos, ((unsigned long *) iter_idx->data)[rpos], ((double *) iter_val->data)[rpos]);
+          // retrieve pivot i-j correlation from position correlation value list at position rpos
+          (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = ((double *) iter_val->data)[rpos];
+          break;
+        case COREQ_PIVOT_GUARANTEE:
+          // same as above, but with scaling alpha-dependent scaling factor
+          rpos = binary_search_ul((*pivots)[j], ((unsigned long *) iter_idx->data), iter_ul->data);
+          (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = 0.5*(1.0+alpha*alpha) * ((double *) iter_val->data)[rpos];
+          break;
+        case COREQ_AVERAGE:
+          // sample log2(N_k) precomputed correlations and use average as estimate
+          sample_size = fmax(1,ceil(log2(cluster_size_arr[j])));
+          (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = 0;
+          for (k = 0; k < sample_size; k++) {
+            // sample random member of cluster j
+            unsigned long sample = rand() % cluster_size_arr[j];
+            rpos = binary_search_ul(cluster_arr[j][sample], ((unsigned long *) iter_idx->data), iter_ul->data);
+            (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] += ((double *) iter_val->data)[rpos];
+          }
+          (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] /= sample_size;
+          break;
+        default:
+          return NULL;
+      }
+    }
+
+    iter_idx = iter_idx->next;
+    iter_val = iter_val->next;
+    iter_ul = iter_ul->next;
+  }
+
+  // destroy correlation containers
+  iter_ptr = correlations_idx_l.first;
+  while (iter_ptr != NULL) {
+    free(iter_ptr->data);
+    iter_ptr = iter_ptr->next;
+  }
+  iter_ptr = correlations_val_l.first;
+  while (iter_ptr != NULL) {
+    free(iter_ptr->data);
+    iter_ptr = iter_ptr->next;
+  }
+
+  // destroy cluster buffer array
+  for (i = 0; i < *n_clus; i++) {
+    free(cluster_arr[i]);
+  }
+  free(cluster_arr);
+  free(cluster_size_arr);
+
+  llist_ptr_destroy(&cluster_l);
+  llist_ptr_destroy(&correlations_idx_l);
+  llist_ptr_destroy(&correlations_val_l);
+  llist_ul_destroy(&correlations_cnt_l);
+  llist_ul_destroy(&timeseries_l);
+  llist_ul_destroy(&pivot_l);
+
+  return *membs;
 }
 
 // compute element-wise norms for evaluation:
@@ -387,6 +594,12 @@ norms(const double *d, const double *corr_triu, const double *corr_clus_triu, co
       } else {
         norm_l1 += fabs(corr_tru-corr_est);
         norm_l2 += (corr_tru-corr_est)*(corr_tru-corr_est);
+#ifdef DEBUG
+        if (fabs(corr_tru-corr_est) > norm_max) {
+          printf("%ld\t%ld\t%ld | %ld\t%ld\t%ld | %.2f\t%.2f\n", i, j, i*n-i*(i+1)/2+j,
+              membs[i], membs[j], ii*k-(ii*(ii+1))/2+jj, corr_est, corr_tru);
+        }
+#endif
         if (norm_max < fabs(corr_tru-corr_est)) {
             norm_max = fabs(corr_tru-corr_est);
         }
@@ -416,7 +629,7 @@ norms(const double *d, const double *corr_triu, const double *corr_clus_triu, co
 /* ######################## PYTHON BINDINGS ######################## */
 
 static PyObject *
-COREQ_Norms(PyObject *self, PyObject* args) {
+BlockCorr_Norms(PyObject *self, PyObject* args) {
   PyObject *arg1, *arg2, *arg3;
   PyArrayObject *input_arr, *cluster_corr, *membs, *norm_vec;
   int precomputed;
@@ -453,9 +666,10 @@ COREQ_Norms(PyObject *self, PyObject* args) {
 }
 
 static PyObject *
-COREQ_Pearson(PyObject *self, PyObject* args) {
+BlockCorr_Pearson(PyObject *self, PyObject* args) {
   PyObject *arg;
-  PyArrayObject *data, *coef;
+  PyArrayObject *data, *coef_py;
+  double *coef;
 
   if(!PyArg_ParseTuple(args, "O", &arg))
     return NULL;
@@ -465,14 +679,19 @@ COREQ_Pearson(PyObject *self, PyObject* args) {
     return NULL;
 
   coef = pearson((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1));
+  if (!coef)
+    return NULL;
+
+  long int dims[2] = {PyArray_DIM(data, 0), PyArray_DIM(data, 0)};
+  coef_py = (PyArrayObject *) PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, coef);
 
   Py_DECREF(data);
-  return PyArray_Return(coef);
+  return PyArray_Return(coef_py);
 }
 
 /* TODO: mmap_fd is never closed and file is forgotten -> unnecessary hdd consumption */
 static PyObject *
-COREQ_PearsonTriu(PyObject *self, PyObject* args) {
+BlockCorr_PearsonTriu(PyObject *self, PyObject* args) {
   PyObject *arg;
   PyArrayObject *data, *coef;
   int diagonal, mmap_arr;
@@ -495,7 +714,7 @@ COREQ_PearsonTriu(PyObject *self, PyObject* args) {
 }
 
 static PyObject *
-COREQ_Cluster(PyObject *self, PyObject* args) {
+BlockCorr_Cluster(PyObject *self, PyObject* args) {
   PyObject *arg;
   PyArrayObject *data, *clus;
   double alpha;
@@ -515,14 +734,67 @@ COREQ_Cluster(PyObject *self, PyObject* args) {
   return PyArray_Return(clus);
 }
 
-static PyMethodDef COREQ_methods[] = {
-  {"Pearson", COREQ_Pearson, METH_VARARGS,
+static PyObject *
+BlockCorr_COREQpp(PyObject *self, PyObject* args) {
+  PyObject *arg;
+  PyArrayObject *data, *membs_arr, *pivots_arr, *cluster_corrs_arr;
+  long int *membs, *pivots;
+  double *cluster_corrs;
+  long int corr_comps, n_clus, n_corrs;
+  double alpha;
+  unsigned long n, l;
+  coreq_estimation_strategy_t est_strat;
+
+  if(!PyArg_ParseTuple(args, "Okd", &arg, &est_strat, &alpha))
+    return NULL;
+
+  // run COREQ++
+  data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
+    NPY_DOUBLE, 2, 2);
+  if (!data) return NULL;
+  n = PyArray_DIM(data, 0);
+  l = PyArray_DIM(data, 1);
+  if (!coreqPP((double *)PyArray_DATA(data), n, l, alpha, est_strat, &membs, &pivots, &cluster_corrs, &n_clus, &corr_comps)) {
+      PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
+      return NULL;
+  }
+  Py_DECREF(data);
+
+  // prepare Python output (cluster assignments)
+  membs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, (long int *) &n, NPY_LONG, membs);
+  if (!membs_arr) {
+      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (memberships).");
+      return NULL;
+  }
+
+  // prepare Python output (pivot choices)
+  pivots_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_clus, NPY_LONG, pivots);
+  if (!pivots_arr) {
+      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (pivots).");
+      return NULL;
+  }
+
+  // prepare Python output (cluster correlations)
+  n_corrs = n_clus*(n_clus+1)/2;
+  cluster_corrs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_corrs, NPY_DOUBLE, cluster_corrs);
+  if (!pivots_arr) {
+      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (correlations).");
+      return NULL;
+  }
+
+  return Py_BuildValue("OOOl", (PyObject *) membs_arr, (PyObject *) pivots_arr, (PyObject *) cluster_corrs_arr, corr_comps);
+}
+
+static PyMethodDef BlockCorr_methods[] = {
+  {"Pearson", BlockCorr_Pearson, METH_VARARGS,
    "corr = Pearson(data)\n\n...\n"},
-  {"PearsonTriu", COREQ_PearsonTriu, METH_VARARGS,
+  {"PearsonTriu", BlockCorr_PearsonTriu, METH_VARARGS,
    "triu_corr = PearsonTriu(data, diagonal=False, mmap=0)\n\nReturn Pearson product-moment correlation coefficients.\n\nParameters\n----------\ndata : array_like\nA 2-D array containing multiple variables and observations. Each row of `data` represents a variable, and each column a single observation of all those variables.\n\nReturns\n-------\ntriu_corr : ndarray\nThe upper triangle of the correlation coefficient matrix of the variables.\n"},
-  {"Cluster", COREQ_Cluster, METH_VARARGS,
+  {"Cluster", BlockCorr_Cluster, METH_VARARGS,
    "labels = Cluster(data, alpha, kappa, max_nan)\n\n...\n"},
-  {"Norms", COREQ_Norms, METH_VARARGS,
+  {"COREQpp", BlockCorr_COREQpp, METH_VARARGS,
+   "(labels, pivots, pivot_corr_triu, computations) = COREQpp(data, alpha, estimation_strategy)\n\n...\n"},
+  {"Norms", BlockCorr_Norms, METH_VARARGS,
    "norm_vec = Norms(input_array, cluster_corr, membs, precomputed=False)\n\nIf precomputed is False (default), input_array is interpreted as a data matrix with N rows and D columns. Otherwise, it is interpreted as a triu correlation matrix of size N*(N+1)/2.\n"},
   {NULL, NULL, 0, NULL}
 };
@@ -541,14 +813,20 @@ static PyMethodDef COREQ_methods[] = {
           ob = Py_InitModule3(name, methods, doc);
 #endif
 
-MOD_INIT(coreq)
+MOD_INIT(BlockCorr)
 {
   PyObject *m;
-  MOD_DEF(m, "coreq", "Build equivalence classes for low redundancy correlation estimation.",
-          COREQ_methods)
+  MOD_DEF(m, "BlockCorr", "Block matrix estimation for correlation coefficients.",
+          BlockCorr_methods)
   if (m == NULL)
     return;
   import_array(); // numpy import
+  if (PyModule_AddIntConstant(m, "ESTIMATE_PIVOT", COREQ_PIVOT))
+    return;
+  if (PyModule_AddIntConstant(m, "ESTIMATE_PIVOT_GUARANTEE", COREQ_PIVOT_GUARANTEE))
+    return;
+  if (PyModule_AddIntConstant(m, "ESTIMATE_AVERAGE", COREQ_AVERAGE))
+    return;
   return MOD_SUCCESS_VAL(m);
 }
 
@@ -556,7 +834,8 @@ int
 main(int argc, char **argv) {
   Py_SetProgramName(argv[0]);
   Py_Initialize();
-    PyImport_ImportModule("coreq");
+    PyImport_ImportModule("BlockCorr");
   Py_Exit(0);
   return 0;
 }
+

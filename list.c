@@ -1,5 +1,5 @@
 /* vim:set ts=8 sw=2 sts=2 noet: */
-/*
+/* 
    Linked list datatype
    Copyright (C) 2017  Erik Scharwaechter <erik.scharwaechter@hpi.de>
    Copyright (C) 2015  Erik Scharwaechter <erik.scharwaechter@rwth-aachen.de>
@@ -84,6 +84,10 @@ double llist_double_back(llist_double *llist) {
   return llist->last->data;
 }
 
+double llist_double_front(llist_double *llist) {
+  return llist->first->data;
+}
+
 
 // UNSIGNED LONG
 
@@ -142,6 +146,10 @@ long int llist_ul_size(llist_ul *llist) {
 
 unsigned long llist_ul_back(llist_ul *llist) {
   return llist->last->data;
+}
+
+unsigned long llist_ul_front(llist_ul *llist) {
+  return llist->first->data;
 }
 
 // remove item from its current list (position) and move to back of another list
@@ -264,4 +272,8 @@ long int llist_ptr_size(llist_ptr *llist) {
 
 void *llist_ptr_back(llist_ptr *llist) {
   return llist->last->data;
+}
+
+void *llist_ptr_front(llist_ptr *llist) {
+  return llist->first->data;
 }
