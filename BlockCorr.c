@@ -57,20 +57,12 @@ double *pearson(const double *d, unsigned long n, unsigned long l) {
 // compute upper triangular part of the correlation matrix
 // and store as a vector of length n*(n+1)/2
 //
-// original code by Aljoscha Rheinwalt
-// adapted by Erik Scharwächter
-//
 // d: data array with n rows and l columns
 // diagonal: (bool) include values on diagonal, default: 0
-// mmap_arr: (bool) create temporary memory mapped file to hold the coefficient array (for large data sets)
-// mmap_fd: pointer to an uninitialized (!) file descriptor for the mmap array, will be initialized
 PyArrayObject *
-pearson_triu(const double *d, unsigned long n, unsigned long l, int diagonal, int mmap_arr, int *mmap_fd) {
+pearson_triu(const double *d, unsigned long n, unsigned long l, int diagonal) {
   PyArrayObject *coef;
-  double *mmap_data;
-  char mmap_filename[] = "tmpTriuCorrMat.XXXXXX";
   long int dim;
-  int errcode;
 
   long i, k, o;
   double mk, sk, dk, h;
@@ -83,37 +75,10 @@ pearson_triu(const double *d, unsigned long n, unsigned long l, int diagonal, in
   else
     dim = n * (n - 1) / 2;
 
-  if (!mmap_arr) {
-    coef = (PyArrayObject *) PyArray_ZEROS(1, &dim, NPY_DOUBLE, 0);
-    if(!coef) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
-      return NULL;
-    }
-  } else {
-    *mmap_fd = mkstemp(mmap_filename);
-    if (*mmap_fd == -1) {
-      perror(NULL);
-      PyErr_SetString(PyExc_MemoryError, "Cannot create temporary file for memory map.");
-      return NULL;
-    }
-    errcode = posix_fallocate(*mmap_fd, 0, dim*sizeof(double));
-    if (errcode) {
-      fprintf(stderr, "Failed allocating %ld bytes on disk.\n", dim*sizeof(double));
-      fprintf(stderr, "%s\n", strerror(errcode));
-      PyErr_SetString(PyExc_MemoryError, "Cannot resize temporary file.");
-      return NULL;
-    }
-    mmap_data = mmap(NULL, dim*sizeof(double), (PROT_READ | PROT_WRITE), MAP_SHARED, *mmap_fd, 0);
-    if (mmap_data == (void *) -1) {
-      perror(NULL);
-      PyErr_SetString(PyExc_MemoryError, "Cannot create memory mapped output array.");
-      return NULL;
-    }
-    coef = (PyArrayObject *) PyArray_SimpleNewFromData(1, &dim, NPY_DOUBLE, mmap_data);
-    if (!coef) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create numpy array from memory map.");
-      return NULL;
-    }
+  coef = (PyArrayObject *) PyArray_ZEROS(1, &dim, NPY_DOUBLE, 0);
+  if (!coef) {
+    PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
+    return NULL;
   }
 
   /* mean and std */
@@ -123,6 +88,7 @@ pearson_triu(const double *d, unsigned long n, unsigned long l, int diagonal, in
     PyErr_SetString(PyExc_MemoryError, "Cannot create mean and std arrays.");
     return NULL;
   }
+
 #pragma omp parallel for private(k, h, mk, sk, dk)
   for (i = 0; i < n; i++) {
     mk = sk = 0;
@@ -689,25 +655,21 @@ BlockCorr_Pearson(PyObject *self, PyObject* args) {
   return PyArray_Return(coef_py);
 }
 
-/* TODO: mmap_fd is never closed and file is forgotten -> unnecessary hdd consumption */
 static PyObject *
 BlockCorr_PearsonTriu(PyObject *self, PyObject* args) {
   PyObject *arg;
   PyArrayObject *data, *coef;
-  int diagonal, mmap_arr;
-  int mmap_fd;
+  int diagonal;
 
   diagonal = 0;
-  mmap_arr = 0;
-  if(!PyArg_ParseTuple(args, "O|ii", &arg, &diagonal, &mmap_arr))
+  if(!PyArg_ParseTuple(args, "O|i", &arg, &diagonal))
     return NULL;
   data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
     NPY_DOUBLE, 2, 2);
   if(!data)
     return NULL;
 
-  coef = pearson_triu((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1),
-      diagonal, mmap_arr, &mmap_fd);
+  coef = pearson_triu((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1), diagonal);
 
   Py_DECREF(data);
   return PyArray_Return(coef);
@@ -789,7 +751,7 @@ static PyMethodDef BlockCorr_methods[] = {
   {"Pearson", BlockCorr_Pearson, METH_VARARGS,
    "corr = Pearson(data)\n\n...\n"},
   {"PearsonTriu", BlockCorr_PearsonTriu, METH_VARARGS,
-   "triu_corr = PearsonTriu(data, diagonal=False, mmap=0)\n\nReturn Pearson product-moment correlation coefficients.\n\nParameters\n----------\ndata : array_like\nA 2-D array containing multiple variables and observations. Each row of `data` represents a variable, and each column a single observation of all those variables.\n\nReturns\n-------\ntriu_corr : ndarray\nThe upper triangle of the correlation coefficient matrix of the variables.\n"},
+   "triu_corr = PearsonTriu(data, diagonal=False)\n\nReturn Pearson product-moment correlation coefficients.\n\nParameters\n----------\ndata : array_like\nA 2-D array containing multiple variables and observations. Each row of `data` represents a variable, and each column a single observation of all those variables.\n\nReturns\n-------\ntriu_corr : ndarray\nThe upper triangle of the correlation coefficient matrix of the variables.\n"},
   {"Cluster", BlockCorr_Cluster, METH_VARARGS,
    "labels = Cluster(data, alpha, kappa, max_nan)\n\n...\n"},
   {"COREQpp", BlockCorr_COREQpp, METH_VARARGS,
