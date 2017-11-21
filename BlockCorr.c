@@ -36,7 +36,6 @@ double *pearson(const double *d, unsigned long n, unsigned long l) {
   long int ij, i, j;
   double *coef;
 
-  // allocate memory
   coef = calloc(n*n, sizeof (double));
   if (!coef) {
     return NULL;
@@ -58,70 +57,24 @@ double *pearson(const double *d, unsigned long n, unsigned long l) {
 // and store as a vector of length n*(n+1)/2
 //
 // d: data array with n rows and l columns
-// diagonal: (bool) include values on diagonal, default: 0
-PyArrayObject *
-pearson_triu(const double *d, unsigned long n, unsigned long l, int diagonal) {
-  PyArrayObject *coef;
-  long int dim;
+// diagonal: (bool) include values on diagonal
+double *
+pearson_triu(const double *d, unsigned long n, unsigned long l) {
+  long int ij, i, j;
+  double *coef;
 
-  long i, k, o;
-  double mk, sk, dk, h;
-  double mi, si, sum;
-  double *m, *s;
-  double *c;
-
-  if (diagonal)
-    dim = n * (n + 1) / 2;
-  else
-    dim = n * (n - 1) / 2;
-
-  coef = (PyArrayObject *) PyArray_ZEROS(1, &dim, NPY_DOUBLE, 0);
+  coef = calloc(n*(n+1)/2, sizeof (double));
   if (!coef) {
-    PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
     return NULL;
   }
 
-  /* mean and std */
-  m = malloc(n * sizeof(double));
-  s = malloc(n * sizeof(double));
-  if (!m || !s) {
-    PyErr_SetString(PyExc_MemoryError, "Cannot create mean and std arrays.");
-    return NULL;
+#pragma omp parallel for private(i, j)
+  for (ij = 0; ij < n*n; ij++) {
+      i = ij/n;
+      j = ij%n;
+      if (i > j) continue;
+      coef[i*n-i*(i+1)/2+j] = pearson2(d, i, j, l);
   }
-
-#pragma omp parallel for private(k, h, mk, sk, dk)
-  for (i = 0; i < n; i++) {
-    mk = sk = 0;
-    for (k = 0; k < l; k++) {
-      dk = d[i*l + k];
-      h = dk - mk;
-      mk += h / (k + 1);
-      sk += h * (dk - mk);
-    }
-    m[i] = mk;
-    s[i] = sqrt(sk / (l - 1));
-  }
-
-  /* dot products */
-  c = (double *) PyArray_DATA(coef);
-#pragma omp parallel for private(k, mi, si, mk, sk, o, sum)
-  for (i = 0; i < n; i++) {
-    mi = m[i];
-    si = s[i];
-    for (k = i+(1-diagonal); k < n; k++) {
-      mk = m[k];
-      sk = s[k];
-      sum = 0;
-      for (o = 0; o < l; o++)
-        sum += (d[i*l + o] - mi) * (d[k*l + o] - mk) / si / sk;
-      if (diagonal)
-        c[i*n-i*(i+1)/2+k] = sum / (l - 1);
-      else
-        c[i*(n-1)-i*(i+1)/2+k-1] = sum / (l - 1);
-    }
-  }
-  free(m);
-  free(s);
 
   return coef;
 }
@@ -634,7 +587,7 @@ BlockCorr_Norms(PyObject *self, PyObject* args) {
 static PyObject *
 BlockCorr_Pearson(PyObject *self, PyObject* args) {
   PyObject *arg;
-  PyArrayObject *data, *coef_py;
+  PyArrayObject *data, *coef_arr;
   double *coef;
 
   if(!PyArg_ParseTuple(args, "O", &arg))
@@ -649,30 +602,42 @@ BlockCorr_Pearson(PyObject *self, PyObject* args) {
     return NULL;
 
   long int dims[2] = {PyArray_DIM(data, 0), PyArray_DIM(data, 0)};
-  coef_py = (PyArrayObject *) PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, coef);
+  coef_arr = (PyArrayObject *) PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, coef);
+  if (!coef_arr) {
+      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array.");
+      return NULL;
+  }
 
   Py_DECREF(data);
-  return PyArray_Return(coef_py);
+  return PyArray_Return(coef_arr);
 }
 
 static PyObject *
 BlockCorr_PearsonTriu(PyObject *self, PyObject* args) {
   PyObject *arg;
-  PyArrayObject *data, *coef;
-  int diagonal;
+  PyArrayObject *data, *coef_arr;
+  double *coef;
 
-  diagonal = 0;
-  if(!PyArg_ParseTuple(args, "O|i", &arg, &diagonal))
+  if (!PyArg_ParseTuple(args, "O", &arg))
     return NULL;
   data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
     NPY_DOUBLE, 2, 2);
-  if(!data)
+  if (!data)
     return NULL;
 
-  coef = pearson_triu((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1), diagonal);
+  coef = pearson_triu((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1));
+  if (!coef)
+    return NULL;
+
+  long int dims[1] = {PyArray_DIM(data, 0)*(PyArray_DIM(data, 0)+1)/2};
+  coef_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, dims, NPY_DOUBLE, coef);
+  if (!coef_arr) {
+      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array.");
+      return NULL;
+  }
 
   Py_DECREF(data);
-  return PyArray_Return(coef);
+  return PyArray_Return(coef_arr);
 }
 
 static PyObject *

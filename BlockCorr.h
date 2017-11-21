@@ -13,7 +13,7 @@ double pearson2(const double *d, const unsigned long i, const unsigned long j, c
 double *pearson(const double *d, unsigned long n, unsigned long l);
 
 // computes size n*(n+1)/2 vector with upper triangular correlation matrix (row-major order)
-//double *pearson_triu(const double *d, unsigned long n, unsigned long l, int diagonal);
+double *pearson_triu(const double *d, unsigned long n, unsigned long l);
 
 // computes size n vector with cluster assignments
 //unsigned long *cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigned long kappa, unsigned long max_nan);
