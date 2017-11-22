@@ -489,15 +489,21 @@ compute_loss(const double *d, const double *corr_triu, const double *corr_clus_t
 
   #pragma omp parallel for private(i, j, corr_tru, corr_est, ii, jj) \
                            reduction(+:loss_abs0,loss_sq0,elements0) \
-                           reduction(max:loss_max0)
+                           reduction(max:loss_max0) \
+                           schedule(dynamic)
   for (i = 0; i < n; i++) {
+    if ((membs[i] < 0) || (membs[i] >= k)) {
+      // Invalid cluster index (must have range 0, ..., k-1). Noise cluster 0 missing?
+      abort = 1;
+      #pragma omp flush (abort)
+    }
     for (j = i; j < n; j++) {
       // for error handling
       #pragma omp flush (abort)
       if (abort)
           continue;
 
-      if ((membs[i] < 0) || (membs[i] >= k) || (membs[j] < 0) || (membs[j] >= k)) {
+      if ((membs[j] < 0) || (membs[j] >= k)) {
         // Invalid cluster index (must have range 0, ..., k-1). Noise cluster 0 missing?
         abort = 1;
         #pragma omp flush (abort)
