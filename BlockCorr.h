@@ -1,6 +1,8 @@
 #ifndef BLOCKCORR_H
 #define BLOCKCORR_H
 
+#define BLOCKCORR_VERSION "0.3"
+
 typedef unsigned long coreq_estimation_strategy_t;
 #define COREQ_PIVOT 0
 #define COREQ_PIVOT_GUARANTEE 1

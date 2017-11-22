@@ -3,8 +3,9 @@ import numpy
 
 mod = Extension('BlockCorr',
     include_dirs = [numpy.get_include()],
-    sources = ['BlockCorr.c', 'list.c'],
+    sources = ['BlockCorr.c', 'list.c', 'PyBlockCorr.c'],
     extra_compile_args=['-fopenmp','-O3','-march=native','-mavx','-funroll-loops'],
+    #extra_compile_args=['-fopenmp','-O3'],
     #extra_compile_args=['-fopenmp','-g','-pg'],
     extra_link_args=['-lgomp']
 )
