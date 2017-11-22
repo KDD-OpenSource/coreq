@@ -148,7 +148,7 @@ BlockCorr_Cluster(PyObject *self, PyObject* args) {
 }
 
 static PyObject *
-BlockCorr_COREQpp(PyObject *self, PyObject* args) {
+BlockCorr_COREQ(PyObject *self, PyObject* args) {
   PyObject *arg;
   PyArrayObject *data, *membs_arr, *pivots_arr, *cluster_corrs_arr;
   long int *membs, *pivots;
@@ -161,13 +161,13 @@ BlockCorr_COREQpp(PyObject *self, PyObject* args) {
   if(!PyArg_ParseTuple(args, "Oid", &arg, &est_strat, &alpha))
     return NULL;
 
-  // run COREQ++
+  // run COREQ
   data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
     NPY_DOUBLE, 2, 2);
   if (!data) return NULL;
   n = PyArray_DIM(data, 0);
   l = PyArray_DIM(data, 1);
-  if (!coreqPP((double *)PyArray_DATA(data), n, l, alpha, est_strat, &membs, &pivots, &cluster_corrs, &n_clus, &corr_comps)) {
+  if (!coreq((double *)PyArray_DATA(data), n, l, alpha, est_strat, &membs, &pivots, &cluster_corrs, &n_clus, &corr_comps)) {
       PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
       return NULL;
   }
@@ -205,8 +205,8 @@ static PyMethodDef BlockCorr_methods[] = {
    "triu_corr = PearsonTriu(data, diagonal=False)\n\nReturn Pearson product-moment correlation coefficients.\n\nParameters\n----------\ndata : array_like\nA 2-D array containing multiple variables and observations. Each row of `data` represents a variable, and each column a single observation of all those variables.\n\nReturns\n-------\ntriu_corr : ndarray\nThe upper triangle of the correlation coefficient matrix of the variables.\n"},
   {"Cluster", BlockCorr_Cluster, METH_VARARGS,
    "labels = Cluster(data, alpha, kappa, max_nan)\n\n...\n"},
-  {"COREQpp", BlockCorr_COREQpp, METH_VARARGS,
-   "(labels, pivots, pivot_corr_triu, computations) = COREQpp(data, alpha, estimation_strategy)\n\n...\n"},
+  {"COREQ", BlockCorr_COREQ, METH_VARARGS,
+   "(labels, pivots, pivot_corr_triu, computations) = COREQ(data, alpha, estimation_strategy)\n\n...\n"},
   {"Loss", BlockCorr_Loss, METH_VARARGS,
    "(abs, sq, max, elems) = Loss(input_array, cluster_corr, membs, precomputed=False)\n\nIf precomputed is False (default), input_array is interpreted as a data matrix with N rows and D columns. Otherwise, it is interpreted as a triu correlation matrix of size N*(N+1)/2.\n"},
   {NULL, NULL, 0, NULL}

@@ -24,7 +24,6 @@ double pearson2(const double *d, const long i, const long j, const long l) {
 }
 
 // compute n-by-n correlation matrix for complete data set d with n rows and l columns
-// triu: 0 for complete matrix, 1 for upper triangular
 double *pearson(const double *d, long n, long l) {
   long int i, j, k;
   double *sums = calloc(n, sizeof (double));
@@ -243,7 +242,7 @@ long binary_search_ul(long key, long *arr, long len) {
   return rpos;
 }
 
-// COREQ++
+// COREQ
 // find equivalence classes in a time series data set and estimate correlations
 // NOTE: no kappa, no noise cluster estimation, no negative clusters, no NaN handling
 //
@@ -260,12 +259,12 @@ long binary_search_ul(long key, long *arr, long len) {
 // n_clus: total number of resulting clusters
 // corr_comps: total number of correlation computations required for clustering/estimation
 long int *
-coreqPP(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t est_strat,
+coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t est_strat,
     long int **membs, long int **pivots, double **cluster_corrs,
     long int *n_clus, long int *corr_comps)
 {
   long pivot, remaining, i, j, k, rpos, sample_size;
-  double rho;
+  double rho, sum_ij;
   llist_ul timeseries_l; // holds all unprocessed time series
   llist_ul pivot_l; // holds all pivot objects selected so far
   llist_ul *clustermemb_l; // holds all time series assigned to a cluster
@@ -277,6 +276,18 @@ coreqPP(const double *d, long n, long l, double alpha, coreq_estimation_strategy
   llist_item_ptr *iter_ptr, *iter_idx, *iter_val;
   long **cluster_arr; // hold all clusters with their members
   long *cluster_size_arr; // hold all cluster sizes
+
+  // precompute some data statistics for fast correlation computation
+  double *sums = calloc(n, sizeof (double));
+  double *sumsqs = calloc(n, sizeof (double));
+#pragma omp parallel for
+  for (i = 0; i < n; i++) {
+#pragma omp simd
+    for (k = 0; k < l; k++) {
+      sums[i] += d[i*l+k];
+      sumsqs[i] += d[i*l+k]*d[i*l+k];
+    }
+  }
 
   *membs = calloc(n, sizeof(long int));
   if (!*membs) return NULL;
@@ -319,7 +330,13 @@ coreqPP(const double *d, long n, long l, double alpha, coreq_estimation_strategy
       iter_ul_next = iter_ul->next; // store successor before relinking
 
       // compute correlation
-      rho = pearson2(d, pivot, iter_ul->data, l);
+      sum_ij = 0.0;
+#pragma omp simd
+      for (k = 0; k < l; k++) {
+        sum_ij += d[pivot*l+k]*d[(iter_ul->data)*l+k];
+      }
+      rho = (l*sum_ij-sums[pivot]*sums[iter_ul->data])/sqrt((l*sumsqs[pivot]-sums[pivot]*sums[pivot])
+              *(l*sumsqs[iter_ul->data]-sums[iter_ul->data]*sums[iter_ul->data]));
       (*corr_comps)++;
       ((long *) llist_ptr_back(&correlations_idx_l))[i] = iter_ul->data;
       ((double *) llist_ptr_back(&correlations_val_l))[i] = rho;
@@ -441,6 +458,8 @@ coreqPP(const double *d, long n, long l, double alpha, coreq_estimation_strategy
   llist_ul_destroy(&timeseries_l);
   llist_ul_destroy(&pivot_l);
 
+  free(sums);
+  free(sumsqs);
   return *membs;
 }
 

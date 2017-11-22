@@ -22,7 +22,7 @@ long *cluster(const double *d, long n, long l, double alpha, long kappa, long ma
 
 // computes cluster assignments, pivots and inter-cluster correlations;
 // also returns the number of clusters and correlation computations
-long *coreqPP(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t est_strat,
+long *coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t est_strat,
     long int **membs, long int **pivots, double **cluster_corrs,
     long int *n_clus, long int *corr_comps);
 
