@@ -9,7 +9,7 @@
 // compute pearson correlation coefficient between time series at positions i1 and i2 in d (of length l)
 // NOTE: result may be nan, if the variance of any of the time series is zero, or if
 // any of the time series contains nans
-double pearson2(const double *d, const unsigned long i, const unsigned long j, const unsigned long l) {
+double pearson2(const double *d, const long i, const long j, const long l) {
   unsigned int k;
   double sum_i = 0.0, sum_j = 0.0, sum_ii = 0.0, sum_jj = 0.0, sum_ij = 0.0;
 #pragma omp simd
@@ -24,7 +24,7 @@ double pearson2(const double *d, const unsigned long i, const unsigned long j, c
 }
 
 // compute n-by-n correlation matrix for complete data set d with n rows and l columns
-double *pearson(const double *d, unsigned long n, unsigned long l) {
+double *pearson(const double *d, long n, long l) {
   long int ij, i, j;
   double *coef;
 
@@ -51,7 +51,7 @@ double *pearson(const double *d, unsigned long n, unsigned long l) {
 // d: data array with n rows and l columns
 // diagonal: (bool) include values on diagonal
 double *
-pearson_triu(const double *d, unsigned long n, unsigned long l) {
+pearson_triu(const double *d, long n, long l) {
   long int ij, i, j;
   double *coef;
 
@@ -77,12 +77,12 @@ pearson_triu(const double *d, unsigned long n, unsigned long l) {
 // alpha: transitivity threshold
 // kappa: minimum cluster size
 // max_nan: maximum number of nans within a pivot time series
-unsigned long *
-cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigned long kappa, unsigned long max_nan)
+long *
+cluster(const double *d, long n, long l, double alpha, long kappa, long max_nan)
 {
-  unsigned long corr_count;
-  unsigned long pivot, i, nan_count;
-  unsigned long *membs;
+  long corr_count;
+  long pivot, i, nan_count;
+  long *membs;
   double rho;
   llist_ul timeseries_l;
   llist_ul *clustermemb_pos_l;
@@ -92,7 +92,7 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
   llist_item_ul *iter_ul, *iter_ul_next;
   llist_item_ptr *iter_ptr;
 
-  membs = calloc(n, sizeof (unsigned long));
+  membs = calloc(n, sizeof (long));
   if (!membs) {
       return NULL;
   }
@@ -198,8 +198,8 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
 }
 
 // assumes that the key really is somewhere in the array
-unsigned long binary_search_ul(unsigned long key, unsigned long *arr, unsigned long len) {
-  unsigned long liml, limr, rpos;
+long binary_search_ul(long key, long *arr, long len) {
+  long liml, limr, rpos;
   liml = 0;
   limr = len-1;
   do {
@@ -232,11 +232,11 @@ unsigned long binary_search_ul(unsigned long key, unsigned long *arr, unsigned l
 // n_clus: total number of resulting clusters
 // corr_comps: total number of correlation computations required for clustering/estimation
 long int *
-coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_estimation_strategy_t est_strat,
+coreqPP(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t est_strat,
     long int **membs, long int **pivots, double **cluster_corrs,
     long int *n_clus, long int *corr_comps)
 {
-  unsigned long pivot, remaining, i, j, k, rpos, sample_size;
+  long pivot, remaining, i, j, k, rpos, sample_size;
   double rho;
   llist_ul timeseries_l; // holds all unprocessed time series
   llist_ul pivot_l; // holds all pivot objects selected so far
@@ -247,8 +247,8 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
   llist_ul  correlations_cnt_l; // holds the number of entries in the previous lists
   llist_item_ul *iter_ul, *iter_ul_next;
   llist_item_ptr *iter_ptr, *iter_idx, *iter_val;
-  unsigned long **cluster_arr; // hold all clusters with their members
-  unsigned long *cluster_size_arr; // hold all cluster sizes
+  long **cluster_arr; // hold all clusters with their members
+  long *cluster_size_arr; // hold all cluster sizes
 
   *membs = calloc(n, sizeof(long int));
   if (!*membs) return NULL;
@@ -275,7 +275,7 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
     // select pivot time series and create its correlation container
     pivot = llist_ul_front(&timeseries_l);
     llist_ul_push_back(&pivot_l, pivot);
-    llist_ptr_push_back(&correlations_idx_l, calloc(remaining, sizeof (unsigned long)));
+    llist_ptr_push_back(&correlations_idx_l, calloc(remaining, sizeof (long)));
     llist_ptr_push_back(&correlations_val_l, calloc(remaining, sizeof (double)));
     llist_ul_push_back(&correlations_cnt_l, remaining);
 
@@ -293,7 +293,7 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
       // compute correlation
       rho = pearson2(d, pivot, iter_ul->data, l);
       (*corr_comps)++;
-      ((unsigned long *) llist_ptr_back(&correlations_idx_l))[i] = iter_ul->data;
+      ((long *) llist_ptr_back(&correlations_idx_l))[i] = iter_ul->data;
       ((double *) llist_ptr_back(&correlations_val_l))[i] = rho;
 
       // add time series to cluster
@@ -313,12 +313,12 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
 
   // prepare output array with cluster assignments
   // and buffer all clusters in cluster_arr for O(1) access to members
-  cluster_arr = calloc(*n_clus, sizeof (unsigned long *));
-  cluster_size_arr = calloc(*n_clus, sizeof (unsigned long));
+  cluster_arr = calloc(*n_clus, sizeof (long *));
+  cluster_size_arr = calloc(*n_clus, sizeof (long));
   i = 0;
   iter_ptr = cluster_l.first;
   while (iter_ptr != NULL) {
-    cluster_arr[i] = calloc(llist_ul_size((llist_ul *) iter_ptr->data), sizeof (unsigned long));
+    cluster_arr[i] = calloc(llist_ul_size((llist_ul *) iter_ptr->data), sizeof (long));
     cluster_size_arr[i] = llist_ul_size((llist_ul *) iter_ptr->data);
     j = 0;
     iter_ul = ((llist_ul *) iter_ptr->data)->first;
@@ -356,13 +356,13 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
       switch (est_strat) {
         case COREQ_PIVOT:
           // search for pivot j in the correlation index list of pivot i
-          rpos = binary_search_ul((*pivots)[j], ((unsigned long *) iter_idx->data), iter_ul->data);
+          rpos = binary_search_ul((*pivots)[j], ((long *) iter_idx->data), iter_ul->data);
           // retrieve pivot i-j correlation from position correlation value list at position rpos
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = ((double *) iter_val->data)[rpos];
           break;
         case COREQ_PIVOT_GUARANTEE:
           // same as above, but with scaling alpha-dependent scaling factor
-          rpos = binary_search_ul((*pivots)[j], ((unsigned long *) iter_idx->data), iter_ul->data);
+          rpos = binary_search_ul((*pivots)[j], ((long *) iter_idx->data), iter_ul->data);
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = 0.5*(1.0+alpha*alpha) * ((double *) iter_val->data)[rpos];
           break;
         case COREQ_AVERAGE:
@@ -371,8 +371,8 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = 0;
           for (k = 0; k < sample_size; k++) {
             // sample random member of cluster j
-            unsigned long sample = rand() % cluster_size_arr[j];
-            rpos = binary_search_ul(cluster_arr[j][sample], ((unsigned long *) iter_idx->data), iter_ul->data);
+            long sample = rand() % cluster_size_arr[j];
+            rpos = binary_search_ul(cluster_arr[j][sample], ((long *) iter_idx->data), iter_ul->data);
             (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] += ((double *) iter_val->data)[rpos];
           }
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] /= sample_size;
@@ -428,12 +428,12 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
 // k: number of clusters
 int
 compute_loss(const double *d, const double *corr_triu, const double *corr_clus_triu, const long *membs,
-      unsigned long n, unsigned long l, unsigned long k,
-      double *loss_abs, double *loss_sq, double *loss_max, unsigned long *elements) {
+      long n, long l, long k,
+      double *loss_abs, double *loss_sq, double *loss_max, long *elements) {
   long i, j, ii, jj;
   double corr_est, corr_tru;
-  double loss_abs0=0., loss_sq0=0., loss_max0=0.;
-  unsigned long elements0=0.;
+  double loss_abs0 = 0., loss_sq0 = 0., loss_max0 = 0.;
+  long elements0 = 0;
   int abort = 0;
 
   if ((d == NULL) && (corr_triu == NULL)) {

@@ -9,7 +9,7 @@ BlockCorr_Loss(PyObject *self, PyObject* args) {
   PyArrayObject *input_arr, *cluster_corr, *membs;
   int precomputed, success;
   double loss_abs, loss_sq, loss_max;
-  unsigned long elements;
+  long elements;
 
   precomputed = 0;
   if (!PyArg_ParseTuple(args, "OOO|i", &arg1, &arg2, &arg3, &precomputed))
@@ -32,7 +32,7 @@ BlockCorr_Loss(PyObject *self, PyObject* args) {
     return NULL;
   }
 
-  membs = (PyArrayObject *) PyArray_ContiguousFromObject(arg3, NPY_ULONG, 1, 1);
+  membs = (PyArrayObject *) PyArray_ContiguousFromObject(arg3, NPY_LONG, 1, 1);
   if (!membs) {
     Py_DECREF(input_arr);
     Py_DECREF(cluster_corr);
@@ -123,10 +123,10 @@ BlockCorr_Cluster(PyObject *self, PyObject* args) {
   PyObject *arg;
   PyArrayObject *data, *clus_arr;
   double alpha;
-  unsigned long kappa, max_nan;
-  unsigned long *clus;
+  long kappa, max_nan;
+  long *clus;
 
-  if(!PyArg_ParseTuple(args, "Odkk", &arg, &alpha, &kappa, &max_nan))
+  if(!PyArg_ParseTuple(args, "Odll", &arg, &alpha, &kappa, &max_nan))
     return NULL;
   data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
     NPY_DOUBLE, 2, 2);
@@ -137,7 +137,7 @@ BlockCorr_Cluster(PyObject *self, PyObject* args) {
       alpha, kappa, max_nan);
 
   long int dims[1] = {PyArray_DIM(data, 0)};
-  clus_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, dims, NPY_ULONG, clus);
+  clus_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, dims, NPY_LONG, clus);
   if (!clus_arr) {
       PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array.");
       return NULL;
@@ -155,10 +155,10 @@ BlockCorr_COREQpp(PyObject *self, PyObject* args) {
   double *cluster_corrs;
   long int corr_comps, n_clus, n_corrs;
   double alpha;
-  unsigned long n, l;
+  long n, l;
   coreq_estimation_strategy_t est_strat;
 
-  if(!PyArg_ParseTuple(args, "Okd", &arg, &est_strat, &alpha))
+  if(!PyArg_ParseTuple(args, "Oid", &arg, &est_strat, &alpha))
     return NULL;
 
   // run COREQ++
@@ -174,14 +174,14 @@ BlockCorr_COREQpp(PyObject *self, PyObject* args) {
   Py_DECREF(data);
 
   // prepare Python output (cluster assignments)
-  membs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, (long int *) &n, NPY_ULONG, membs);
+  membs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, (long int *) &n, NPY_LONG, membs);
   if (!membs_arr) {
       PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (memberships).");
       return NULL;
   }
 
   // prepare Python output (pivot choices)
-  pivots_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_clus, NPY_ULONG, pivots);
+  pivots_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_clus, NPY_LONG, pivots);
   if (!pivots_arr) {
       PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (pivots).");
       return NULL;
