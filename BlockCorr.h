@@ -14,7 +14,7 @@ double pearson2(const double *d, const long i, const long j, const long l);
 // computes size n*n vector with correlation matrix in row-major order
 double *pearson(const double *d, long n, long l);
 
-// computes size n*(n+1)/2 vector with upper triangular correlation matrix (row-major order)
+// computes size n*(n+1)/2 vector with upper triangular correlation matrix in row-major order
 double *pearson_triu(const double *d, long n, long l);
 
 // computes size n vector with cluster assignments

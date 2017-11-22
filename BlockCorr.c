@@ -24,50 +24,78 @@ double pearson2(const double *d, const long i, const long j, const long l) {
 }
 
 // compute n-by-n correlation matrix for complete data set d with n rows and l columns
+// triu: 0 for complete matrix, 1 for upper triangular
 double *pearson(const double *d, long n, long l) {
-  long int ij, i, j;
-  double *coef;
+  long int i, j, k;
+  double *sums = calloc(n, sizeof (double));
+  double *sumsqs = calloc(n, sizeof (double));
+  double *coef = calloc(n*n, sizeof (double));
+  if (!coef || !sums || !sumsqs) return NULL;
+  double sum_ij = 0.0;
 
-  coef = calloc(n*n, sizeof (double));
-  if (!coef) {
-    return NULL;
+#pragma omp parallel for
+  for (i = 0; i < n; i++) {
+#pragma omp simd
+    for (k = 0; k < l; k++) {
+      sums[i] += d[i*l+k];
+      sumsqs[i] += d[i*l+k]*d[i*l+k];
+    }
   }
 
-#pragma omp parallel for private(i, j)
-  for (ij = 0; ij < n*n; ij++) {
-      i = ij/n;
-      j = ij%n;
+#pragma omp parallel for collapse(2) private (sum_ij) schedule(dynamic)
+  for (i = 0; i < n; i++) {
+    for (j = 0; j < n; j++) {
       if (i > j) continue;
-      coef[i*n+j] = pearson2(d, i, j, l);
+      sum_ij = 0.0;
+#pragma omp simd
+      for (k = 0; k < l; k++) {
+        sum_ij += d[i*l+k]*d[j*l+k];
+      }
+      coef[i*n+j] = (l*sum_ij-sums[i]*sums[j])/sqrt((l*sumsqs[i]-sums[i]*sums[i])*(l*sumsqs[j]-sums[j]*sums[j]));
       coef[j*n+i] = coef[i*n+j];
+    }
   }
 
+  free(sums);
+  free(sumsqs);
   return coef;
 }
 
 // compute upper triangular part of the correlation matrix
 // and store as a vector of length n*(n+1)/2
-//
-// d: data array with n rows and l columns
-// diagonal: (bool) include values on diagonal
 double *
 pearson_triu(const double *d, long n, long l) {
-  long int ij, i, j;
-  double *coef;
+  long int i, j, k;
+  double *sums = calloc(n, sizeof (double));
+  double *sumsqs = calloc(n, sizeof (double));
+  double *coef = calloc(n*(n+1)/2, sizeof (double));
+  double sum_ij;
+  if (!coef) return NULL;
 
-  coef = calloc(n*(n+1)/2, sizeof (double));
-  if (!coef) {
-    return NULL;
+#pragma omp parallel for
+  for (i = 0; i < n; i++) {
+#pragma omp simd
+    for (k = 0; k < l; k++) {
+      sums[i] += d[i*l+k];
+      sumsqs[i] += d[i*l+k]*d[i*l+k];
+    }
   }
 
-#pragma omp parallel for private(i, j)
-  for (ij = 0; ij < n*n; ij++) {
-      i = ij/n;
-      j = ij%n;
+#pragma omp parallel for collapse(2) private (sum_ij) schedule(dynamic)
+  for (i = 0; i < n; i++) {
+    for (j = 0; j < n; j++) {
       if (i > j) continue;
-      coef[i*n-i*(i+1)/2+j] = pearson2(d, i, j, l);
+      sum_ij = 0.0;
+#pragma omp simd
+      for (k = 0; k < l; k++) {
+        sum_ij += d[i*l+k]*d[j*l+k];
+      }
+      coef[i*n-i*(i+1)/2+j] = (l*sum_ij-sums[i]*sums[j])/sqrt((l*sumsqs[i]-sums[i]*sums[i])*(l*sumsqs[j]-sums[j]*sums[j]));
+    }
   }
 
+  free(sums);
+  free(sumsqs);
   return coef;
 }
 
