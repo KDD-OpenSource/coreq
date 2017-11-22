@@ -16,8 +16,10 @@ double *pearson(const double *d, unsigned long n, unsigned long l);
 double *pearson_triu(const double *d, unsigned long n, unsigned long l);
 
 // computes size n vector with cluster assignments
-//unsigned long *cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigned long kappa, unsigned long max_nan);
+unsigned long *cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigned long kappa, unsigned long max_nan);
 
+// computes cluster assignments, pivots and inter-cluster correlations;
+// also returns the number of clusters and correlation computations
 long int *
 coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_estimation_strategy_t est_strat,
     long int **membs, long int **pivots, double **cluster_corrs,

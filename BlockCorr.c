@@ -85,11 +85,12 @@ pearson_triu(const double *d, unsigned long n, unsigned long l) {
 // alpha: transitivity threshold
 // kappa: minimum cluster size
 // max_nan: maximum number of nans within a pivot time series
-PyArrayObject *
+unsigned long *
 cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigned long kappa, unsigned long max_nan)
 {
   unsigned long corr_count;
   unsigned long pivot, i, nan_count;
+  unsigned long *membs;
   double rho;
   llist_ul timeseries_l;
   llist_ul *clustermemb_pos_l;
@@ -99,9 +100,8 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
   llist_item_ul *iter_ul, *iter_ul_next;
   llist_item_ptr *iter_ptr;
 
-  PyArrayObject *membs = (PyArrayObject *) PyArray_ZEROS(1, (long int *) &n, NPY_LONG, 0);
-  if(!membs) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
+  membs = calloc(n, sizeof (unsigned long));
+  if (!membs) {
       return NULL;
   }
 
@@ -124,16 +124,15 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
   corr_count = 0;
   while (llist_ul_size(&timeseries_l) > 0) {
     printf("\r% 9ld left...", llist_ul_size(&timeseries_l));
-    pivot = llist_ul_back(&timeseries_l);
+    pivot = llist_ul_front(&timeseries_l);
 
     // check if pivot contains too many nans to be considered a pivot
     nan_count = 0;
-    for (i = 0; i < l; i++) {
-      if (isnan(d[pivot*l+i])) nan_count++;
-    }
+    for (i = 0; i < l; i++)
+      if (isnan(d[pivot*l+i]))
+        nan_count++;
     if (nan_count > max_nan) {
       // add pivot to noise cluster
-      //printf("pivot %ld has too many nans\n", pivot);
       llist_ul_relink(timeseries_l.last, &timeseries_l, noise_l);
       continue;
     }
@@ -154,10 +153,9 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
       rho = pearson2(d, pivot, iter_ul->data, l);
       corr_count++;
       if (isnan(rho)) {
-        // TODO: we add the tested time series to the noise cluster, this might not be
+        // NOTE: we add the tested time series to the noise cluster, this might not be
         // a good idea if nan value occurs because there are no overlapping valid time steps
         // in pivot and tested time series
-        //printf("rho=nan for pivot %ld and time series %ld\n", pivot, iter_ul->data);
         llist_ul_relink(iter_ul, &timeseries_l, noise_l);
       } else {
         if (rho >=  alpha) llist_ul_relink(iter_ul, &timeseries_l, clustermemb_pos_l);
@@ -165,29 +163,6 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
       }
       iter_ul = iter_ul_next;
     }
-
-#ifdef DEBUG
-    llist_item_ul *tmp_iter1;
-    llist_item_ul *tmp_iter2;
-    tmp_iter1 = clustermemb_pos_l->first;
-    while (tmp_iter1) {
-      tmp_iter2 = tmp_iter1;
-      while (tmp_iter2) {
-        printf("pos %ld %ld %.2f\n", tmp_iter1->data, tmp_iter2->data, pearson2(d, tmp_iter1->data, tmp_iter2->data, l));
-        tmp_iter2 = tmp_iter2->next;
-      }
-      tmp_iter1 = tmp_iter1->next;
-    }
-    tmp_iter1 = clustermemb_neg_l->first;
-    while (tmp_iter1) {
-      tmp_iter2 = tmp_iter1;
-      while (tmp_iter2) {
-        printf("neg %ld %ld %.2f\n", tmp_iter1->data, tmp_iter2->data, pearson2(d, tmp_iter1->data, tmp_iter2->data, l));
-        tmp_iter2 = tmp_iter2->next;
-      }
-      tmp_iter1 = tmp_iter1->next;
-    }
-#endif
 
     // check whether protoclusters fulfill the minimium size constraints
     if (llist_ul_size(clustermemb_pos_l) >= kappa) {
@@ -216,10 +191,7 @@ cluster(const double *d, unsigned long n, unsigned long l, double alpha, unsigne
   while (iter_ptr != NULL) {
     iter_ul = ((llist_ul *) iter_ptr->data)->first;
     while (iter_ul != NULL) {
-      (*(long int *) PyArray_GETPTR1(membs, iter_ul->data)) = i;
-#ifdef DEBUG
-      printf("%ld -> %ld\n", iter_ul->data, i);
-#endif
+      membs[iter_ul->data] = i;
       iter_ul = iter_ul->next;
     }
     llist_ul_destroy((llist_ul *) iter_ptr->data);
@@ -393,7 +365,6 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
         case COREQ_PIVOT:
           // search for pivot j in the correlation index list of pivot i
           rpos = binary_search_ul((*pivots)[j], ((unsigned long *) iter_idx->data), iter_ul->data);
-          //printf("p%lu=ts%lu@loc%lu(ts%lu):%.2f ", j, (*pivots)[j], rpos, ((unsigned long *) iter_idx->data)[rpos], ((double *) iter_val->data)[rpos]);
           // retrieve pivot i-j correlation from position correlation value list at position rpos
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = ((double *) iter_val->data)[rpos];
           break;
@@ -567,7 +538,7 @@ BlockCorr_Norms(PyObject *self, PyObject* args) {
   if (!input_arr) return NULL;
   cluster_corr = (PyArrayObject *) PyArray_ContiguousFromObject(arg2, NPY_DOUBLE, 1, 1);
   if (!cluster_corr) return NULL;
-  membs = (PyArrayObject *) PyArray_ContiguousFromObject(arg3, NPY_LONG, 1, 1);
+  membs = (PyArrayObject *) PyArray_ContiguousFromObject(arg3, NPY_ULONG, 1, 1);
   if (!membs) return NULL;
 
   if (precomputed) {
@@ -643,9 +614,10 @@ BlockCorr_PearsonTriu(PyObject *self, PyObject* args) {
 static PyObject *
 BlockCorr_Cluster(PyObject *self, PyObject* args) {
   PyObject *arg;
-  PyArrayObject *data, *clus;
+  PyArrayObject *data, *clus_arr;
   double alpha;
   unsigned long kappa, max_nan;
+  unsigned long *clus;
 
   if(!PyArg_ParseTuple(args, "Odkk", &arg, &alpha, &kappa, &max_nan))
     return NULL;
@@ -657,8 +629,15 @@ BlockCorr_Cluster(PyObject *self, PyObject* args) {
   clus = cluster((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1),
       alpha, kappa, max_nan);
 
+  long int dims[1] = {PyArray_DIM(data, 0)};
+  clus_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, dims, NPY_ULONG, clus);
+  if (!clus_arr) {
+      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array.");
+      return NULL;
+  }
+
   Py_DECREF(data);
-  return PyArray_Return(clus);
+  return PyArray_Return(clus_arr);
 }
 
 static PyObject *
@@ -688,14 +667,14 @@ BlockCorr_COREQpp(PyObject *self, PyObject* args) {
   Py_DECREF(data);
 
   // prepare Python output (cluster assignments)
-  membs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, (long int *) &n, NPY_LONG, membs);
+  membs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, (long int *) &n, NPY_ULONG, membs);
   if (!membs_arr) {
       PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (memberships).");
       return NULL;
   }
 
   // prepare Python output (pivot choices)
-  pivots_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_clus, NPY_LONG, pivots);
+  pivots_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_clus, NPY_ULONG, pivots);
   if (!pivots_arr) {
       PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (pivots).");
       return NULL;
