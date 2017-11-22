@@ -424,8 +424,8 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
   return *membs;
 }
 
-// compute element-wise norms for evaluation:
-// absolute deviation (L1), square root of sum of squared deviation (L2), maximum deviation (Lmax)
+// compute aggregated losses for evaluation:
+// absolute deviation, squared deviation, maximum deviation
 //
 // d: data set with n rows and l columns (may be NULL if corr_triu specified)
 // corr_triu: precomputed true correlations in triu array (may be NULL if d specified)
@@ -434,28 +434,23 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
 // n: number of time series (rows in d)
 // l: number of time steps (columns in d)
 // k: number of clusters
-//
-// output: numpy array [L1, L2, Lmax, nan_count], where nan_count is the number of time series
-// pairs that were not considered because either their true or estimated correlation is NaN
-PyArrayObject *
-norms(const double *d, const double *corr_triu, const double *corr_clus_triu, const long *membs,
-      unsigned long n, unsigned long l, unsigned long k) {
-  double norm_l1 = 0.0;
-  double norm_l2 = 0.0;
-  double norm_max = 0.0;
-  unsigned long nan_vals = 0;
+int
+compute_loss(const double *d, const double *corr_triu, const double *corr_clus_triu, const long *membs,
+      unsigned long n, unsigned long l, unsigned long k,
+      double *loss_abs, double *loss_sq, double *loss_max, unsigned long *elements) {
   long i, j, ii, jj;
-  int abort = 0;
   double corr_est, corr_tru;
+  double loss_abs0=0., loss_sq0=0., loss_max0=0.;
+  unsigned long elements0=0.;
+  int abort = 0;
 
-  if((d == NULL) && (corr_triu == NULL)) {
-    PyErr_SetString(PyExc_ValueError, "Either data matrix or precomputed correlations must be specified.");
-    return NULL;
+  if ((d == NULL) && (corr_triu == NULL)) {
+    return -1;
   }
 
   #pragma omp parallel for private(i, j, corr_tru, corr_est, ii, jj) \
-                           reduction(+:norm_l1,norm_l2,nan_vals) \
-                           reduction(max:norm_max)
+                           reduction(+:loss_abs0,loss_sq0,elements0) \
+                           reduction(max:loss_max0)
   for (i = 0; i < n; i++) {
     for (j = i; j < n; j++) {
       // for error handling
@@ -464,8 +459,7 @@ norms(const double *d, const double *corr_triu, const double *corr_clus_triu, co
           continue;
 
       if ((membs[i] < 0) || (membs[i] >= k) || (membs[j] < 0) || (membs[j] >= k)) {
-        PyErr_SetString(PyExc_ValueError,
-              "Invalid cluster index (must have range 0, ..., k-1). Noise cluster 0 missing?");
+        // Invalid cluster index (must have range 0, ..., k-1). Noise cluster 0 missing?
         abort = 1;
         #pragma omp flush (abort)
       }
@@ -479,50 +473,36 @@ norms(const double *d, const double *corr_triu, const double *corr_clus_triu, co
       jj = fmaxl(membs[i], membs[j]);
       corr_est = corr_clus_triu[ii*k-ii*(ii+1)/2+jj]; // triu indexing (with diagonal)
 
-      if (isnan(corr_tru) || isnan(corr_est)) {
-        nan_vals++;
-      } else {
-        norm_l1 += fabs(corr_tru-corr_est);
-        norm_l2 += (corr_tru-corr_est)*(corr_tru-corr_est);
-#ifdef DEBUG
-        if (fabs(corr_tru-corr_est) > norm_max) {
-          printf("%ld\t%ld\t%ld | %ld\t%ld\t%ld | %.2f\t%.2f\n", i, j, i*n-i*(i+1)/2+j,
-              membs[i], membs[j], ii*k-(ii*(ii+1))/2+jj, corr_est, corr_tru);
-        }
-#endif
-        if (norm_max < fabs(corr_tru-corr_est)) {
-            norm_max = fabs(corr_tru-corr_est);
+      if (!(isnan(corr_tru) || isnan(corr_est))) {
+        elements0 += 1;
+        loss_abs0 += fabs(corr_tru-corr_est);
+        loss_sq0  += (corr_tru-corr_est)*(corr_tru-corr_est);
+        if (loss_max0 < fabs(corr_tru-corr_est)) {
+            loss_max0 = fabs(corr_tru-corr_est);
         }
       }
     }
   }
-  norm_l2 = sqrt(norm_l2);
   if (abort) {
-      return NULL;
+      return -2;
   }
 
-  // prepare output
-  PyArrayObject *norm_vec;
-  long int dim = 4;
-  norm_vec = (PyArrayObject *) PyArray_ZEROS(1, &dim, NPY_DOUBLE, 0);
-  if(!norm_vec) {
-    PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
-    return NULL;
-  }
-  *((double *) PyArray_GETPTR1(norm_vec, 0)) = norm_l1;
-  *((double *) PyArray_GETPTR1(norm_vec, 1)) = norm_l2;
-  *((double *) PyArray_GETPTR1(norm_vec, 2)) = norm_max;
-  *((double *) PyArray_GETPTR1(norm_vec, 3)) = (double) nan_vals;
-  return norm_vec;
+  *loss_abs = loss_abs0;
+  *loss_sq = loss_sq0;
+  *loss_max = loss_max0;
+  *elements = elements0;
+  return 1;
 }
 
 /* ######################## PYTHON BINDINGS ######################## */
 
 static PyObject *
-BlockCorr_Norms(PyObject *self, PyObject* args) {
+BlockCorr_Loss(PyObject *self, PyObject* args) {
   PyObject *arg1, *arg2, *arg3;
-  PyArrayObject *input_arr, *cluster_corr, *membs, *norm_vec;
-  int precomputed;
+  PyArrayObject *input_arr, *cluster_corr, *membs;
+  int precomputed, success;
+  double loss_abs, loss_sq, loss_max;
+  unsigned long elements;
 
   precomputed = 0;
   if (!PyArg_ParseTuple(args, "OOO|i", &arg1, &arg2, &arg3, &precomputed))
@@ -535,24 +515,44 @@ BlockCorr_Norms(PyObject *self, PyObject* args) {
       // shape: (N,D)
       input_arr = (PyArrayObject *) PyArray_ContiguousFromObject(arg1, NPY_DOUBLE, 2, 2);
   }
-  if (!input_arr) return NULL;
+  if (!input_arr) {
+    return NULL;
+  }
+
   cluster_corr = (PyArrayObject *) PyArray_ContiguousFromObject(arg2, NPY_DOUBLE, 1, 1);
-  if (!cluster_corr) return NULL;
+  if (!cluster_corr) {
+    Py_DECREF(input_arr);
+    return NULL;
+  }
+
   membs = (PyArrayObject *) PyArray_ContiguousFromObject(arg3, NPY_ULONG, 1, 1);
-  if (!membs) return NULL;
+  if (!membs) {
+    Py_DECREF(input_arr);
+    Py_DECREF(cluster_corr);
+    return NULL;
+  }
 
   if (precomputed) {
-    norm_vec = norms(NULL, (double *)PyArray_DATA(input_arr), (double *)PyArray_DATA(cluster_corr), (long int *)PyArray_DATA(membs),
-                  PyArray_DIM(membs, 0), 0, -1/2.+sqrt(1/4.+2.*PyArray_DIM(cluster_corr, 0)));
+    success = compute_loss(NULL, (double *)PyArray_DATA(input_arr), (double *)PyArray_DATA(cluster_corr),
+                  (long int *)PyArray_DATA(membs),
+                  PyArray_DIM(membs, 0), 0, -1/2.+sqrt(1/4.+2.*PyArray_DIM(cluster_corr, 0)),
+                  &loss_abs, &loss_sq, &loss_max, &elements);
   } else {
-    norm_vec = norms((double *)PyArray_DATA(input_arr), NULL, (double *)PyArray_DATA(cluster_corr), (long int *)PyArray_DATA(membs),
-                  PyArray_DIM(membs, 0), PyArray_DIM(input_arr, 1), -1/2.+sqrt(1/4.+2.*PyArray_DIM(cluster_corr, 0)));
+    success = compute_loss((double *)PyArray_DATA(input_arr), NULL, (double *)PyArray_DATA(cluster_corr),
+                  (long int *)PyArray_DATA(membs),
+                  PyArray_DIM(membs, 0), PyArray_DIM(input_arr, 1), -1/2.+sqrt(1/4.+2.*PyArray_DIM(cluster_corr, 0)),
+                  &loss_abs, &loss_sq, &loss_max, &elements);
   }
 
   Py_DECREF(input_arr);
   Py_DECREF(cluster_corr);
   Py_DECREF(membs);
-  return PyArray_Return(norm_vec);
+
+  if (success) {
+    return Py_BuildValue("dddl", loss_abs, loss_sq, loss_max, elements);
+  } else {
+    Py_RETURN_NONE;
+  }
 }
 
 static PyObject *
@@ -700,8 +700,8 @@ static PyMethodDef BlockCorr_methods[] = {
    "labels = Cluster(data, alpha, kappa, max_nan)\n\n...\n"},
   {"COREQpp", BlockCorr_COREQpp, METH_VARARGS,
    "(labels, pivots, pivot_corr_triu, computations) = COREQpp(data, alpha, estimation_strategy)\n\n...\n"},
-  {"Norms", BlockCorr_Norms, METH_VARARGS,
-   "norm_vec = Norms(input_array, cluster_corr, membs, precomputed=False)\n\nIf precomputed is False (default), input_array is interpreted as a data matrix with N rows and D columns. Otherwise, it is interpreted as a triu correlation matrix of size N*(N+1)/2.\n"},
+  {"Loss", BlockCorr_Loss, METH_VARARGS,
+   "(abs, sq, max, elems) = Loss(input_array, cluster_corr, membs, precomputed=False)\n\nIf precomputed is False (default), input_array is interpreted as a data matrix with N rows and D columns. Otherwise, it is interpreted as a triu correlation matrix of size N*(N+1)/2.\n"},
   {NULL, NULL, 0, NULL}
 };
 

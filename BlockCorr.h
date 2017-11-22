@@ -25,4 +25,10 @@ coreqPP(const double *d, unsigned long n, unsigned long l, double alpha, coreq_e
     long int **membs, long int **pivots, double **cluster_corrs,
     long int *n_clus, long int *corr_comps);
 
+
+int
+compute_loss(const double *d, const double *corr_triu, const double *corr_clus_triu, const long *membs,
+      unsigned long n, unsigned long l, unsigned long k,
+      double *loss_abs, double *loss_sq, double *loss_max, unsigned long *elements);
+
 #endif
