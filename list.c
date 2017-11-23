@@ -1,8 +1,6 @@
-/* vim:set ts=8 sw=2 sts=2 noet: */
 /* 
    Linked list datatype
    Copyright (C) 2017  Erik Scharwaechter <erik.scharwaechter@hpi.de>
-   Copyright (C) 2015  Erik Scharwaechter <erik.scharwaechter@rwth-aachen.de>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -56,20 +54,20 @@ void llist_double_print(llist_double *llist) {
 }
 
 int llist_double_push_back(llist_double *llist, double data) {
-  llist_item_double *new = malloc(sizeof(llist_item_double));
-  if (new == NULL) {
+  llist_item_double *new_item = (llist_item_double *) malloc(sizeof(llist_item_double));
+  if (new_item == NULL) {
     return 1;
   }
-  new->data = data;
-  new->next = NULL;
-  new->prev = llist->last;
+  new_item->data = data;
+  new_item->next = NULL;
+  new_item->prev = llist->last;
 
   if (llist->last == NULL) {
-    llist->last = new;
-    llist->first = new;
+    llist->last = new_item;
+    llist->first = new_item;
   } else {
-    llist->last->next = new;
-    llist->last = new;
+    llist->last->next = new_item;
+    llist->last = new_item;
   }
   llist->len++;
 
@@ -120,20 +118,20 @@ void llist_ul_print(llist_ul *llist) {
 }
 
 int llist_ul_push_back(llist_ul *llist, unsigned long data) {
-  llist_item_ul *new = malloc(sizeof(llist_item_ul));
-  if (new == NULL) {
+  llist_item_ul *new_item = (llist_item_ul *) malloc(sizeof(llist_item_ul));
+  if (new_item == NULL) {
     return 1;
   }
-  new->data = data;
-  new->next = NULL;
-  new->prev = llist->last;
+  new_item->data = data;
+  new_item->next = NULL;
+  new_item->prev = llist->last;
 
   if (llist->last == NULL) {
-    llist->last = new;
-    llist->first = new;
+    llist->last = new_item;
+    llist->first = new_item;
   } else {
-    llist->last->next = new;
-    llist->last = new;
+    llist->last->next = new_item;
+    llist->last = new_item;
   }
   llist->len++;
 
@@ -246,20 +244,20 @@ void llist_ptr_print(llist_ptr *llist) {
 }
 
 int llist_ptr_push_back(llist_ptr *llist, void *data) {
-  llist_item_ptr *new = malloc(sizeof(llist_item_ptr));
-  if (new == NULL) {
+  llist_item_ptr *new_item = (llist_item_ptr *) malloc(sizeof(llist_item_ptr));
+  if (new_item == NULL) {
     return 1;
   }
-  new->data = data;
-  new->next = NULL;
-  new->prev = llist->last;
+  new_item->data = data;
+  new_item->next = NULL;
+  new_item->prev = llist->last;
 
   if (llist->last == NULL) {
-    llist->last = new;
-    llist->first = new;
+    llist->last = new_item;
+    llist->first = new_item;
   } else {
-    llist->last->next = new;
-    llist->last = new;
+    llist->last->next = new_item;
+    llist->last = new_item;
   }
   llist->len++;
 

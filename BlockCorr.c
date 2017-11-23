@@ -26,9 +26,9 @@ double pearson2(const double *d, const long i, const long j, const long l) {
 // compute n-by-n correlation matrix for complete data set d with n rows and l columns
 double *pearson(const double *d, long n, long l) {
   long int i, j, k;
-  double *sums = calloc(n, sizeof (double));
-  double *sumsqs = calloc(n, sizeof (double));
-  double *coef = calloc(n*n, sizeof (double));
+  double *sums = (double *) calloc(n, sizeof (double));
+  double *sumsqs = (double *) calloc(n, sizeof (double));
+  double *coef = (double *) calloc(n*n, sizeof (double));
   if (!coef || !sums || !sumsqs) return NULL;
   double sum_ij = 0.0;
 
@@ -65,9 +65,9 @@ double *pearson(const double *d, long n, long l) {
 double *
 pearson_triu(const double *d, long n, long l) {
   long int i, j, k;
-  double *sums = calloc(n, sizeof (double));
-  double *sumsqs = calloc(n, sizeof (double));
-  double *coef = calloc(n*(n+1)/2, sizeof (double));
+  double *sums = (double *) calloc(n, sizeof (double));
+  double *sumsqs = (double *) calloc(n, sizeof (double));
+  double *coef = (double *) calloc(n*(n+1)/2, sizeof (double));
   double sum_ij;
   if (!coef) return NULL;
 
@@ -119,7 +119,7 @@ cluster(const double *d, long n, long l, double alpha, long kappa, long max_nan)
   llist_item_ul *iter_ul, *iter_ul_next;
   llist_item_ptr *iter_ptr;
 
-  membs = calloc(n, sizeof (long));
+  membs = (long *) calloc(n, sizeof (long));
   if (!membs) {
       return NULL;
   }
@@ -278,8 +278,8 @@ coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t
   long *cluster_size_arr; // hold all cluster sizes
 
   // precompute some data statistics for fast correlation computation
-  double *sums = calloc(n, sizeof (double));
-  double *sumsqs = calloc(n, sizeof (double));
+  double *sums = (double *) calloc(n, sizeof (double));
+  double *sumsqs = (double *) calloc(n, sizeof (double));
 #pragma omp parallel for
   for (i = 0; i < n; i++) {
 #pragma omp simd
@@ -289,7 +289,7 @@ coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t
     }
   }
 
-  *membs = calloc(n, sizeof(long int));
+  *membs = (long int *) calloc(n, sizeof(long int));
   if (!*membs) return NULL;
 
   // initialize time series index list
@@ -314,8 +314,8 @@ coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t
     // select pivot time series and create its correlation container
     pivot = llist_ul_front(&timeseries_l);
     llist_ul_push_back(&pivot_l, pivot);
-    llist_ptr_push_back(&correlations_idx_l, calloc(remaining, sizeof (long)));
-    llist_ptr_push_back(&correlations_val_l, calloc(remaining, sizeof (double)));
+    llist_ptr_push_back(&correlations_idx_l, (long *) calloc(remaining, sizeof (long)));
+    llist_ptr_push_back(&correlations_val_l, (double *) calloc(remaining, sizeof (double)));
     llist_ul_push_back(&correlations_cnt_l, remaining);
 
     // initialize cluster container
@@ -358,12 +358,12 @@ coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t
 
   // prepare output array with cluster assignments
   // and buffer all clusters in cluster_arr for O(1) access to members
-  cluster_arr = calloc(*n_clus, sizeof (long *));
-  cluster_size_arr = calloc(*n_clus, sizeof (long));
+  cluster_arr = (long **) calloc(*n_clus, sizeof (long *));
+  cluster_size_arr = (long *) calloc(*n_clus, sizeof (long));
   i = 0;
   iter_ptr = cluster_l.first;
   while (iter_ptr != NULL) {
-    cluster_arr[i] = calloc(llist_ul_size((llist_ul *) iter_ptr->data), sizeof (long));
+    cluster_arr[i] = (long *) calloc(llist_ul_size((llist_ul *) iter_ptr->data), sizeof (long));
     cluster_size_arr[i] = llist_ul_size((llist_ul *) iter_ptr->data);
     j = 0;
     iter_ul = ((llist_ul *) iter_ptr->data)->first;
@@ -380,7 +380,7 @@ coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t
   }
 
   // prepare output array with pivots
-  *pivots = calloc(*n_clus, sizeof (long int));
+  *pivots = (long int *) calloc(*n_clus, sizeof (long int));
   i = 0;
   iter_ul = pivot_l.first;
   while (iter_ul != NULL) {
@@ -392,7 +392,7 @@ coreq(const double *d, long n, long l, double alpha, coreq_estimation_strategy_t
   // prepare output array with correlation estimates in O(K*(K+1)/2 * log2(N) * log2(N))
   // NOTE: we use binary search to look up the precomputed pivot-time series correlations;
   // no additional correlation computations are necessary, which would require O(K*(K+1)/2 * T * log2(N))
-  *cluster_corrs = calloc((*n_clus)*(*n_clus+1)/2, sizeof (double));
+  *cluster_corrs = (double *) calloc((*n_clus)*(*n_clus+1)/2, sizeof (double));
   iter_idx = correlations_idx_l.first;
   iter_val = correlations_val_l.first;
   iter_ul = correlations_cnt_l.first;
