@@ -495,7 +495,7 @@ compute_loss(const double *d, const double *corr_triu, const double *corr_clus_t
   int abort = 0;
 
   if ((d == NULL) && (corr_triu == NULL)) {
-    return -1;
+    return 0;
   }
 
   #pragma omp parallel for private(i, j, corr_tru, corr_est, ii, jj) \
@@ -540,7 +540,7 @@ compute_loss(const double *d, const double *corr_triu, const double *corr_clus_t
     }
   }
   if (abort) {
-      return -2;
+      return 0;
   }
 
   *loss_abs = loss_abs0;
