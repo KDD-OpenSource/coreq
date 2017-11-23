@@ -217,55 +217,54 @@ BlockCorr_COREQ(PyObject *self, PyObject* args) {
 
 static PyMethodDef BlockCorr_methods[] = {
   {"Pearson", BlockCorr_Pearson, METH_VARARGS,
-   "corr = Pearson(data)\n\n...\n"},
+   "corr = Pearson(data)"},
   {"PearsonTriu", BlockCorr_PearsonTriu, METH_VARARGS,
-   "triu_corr = PearsonTriu(data, diagonal=False)\n\nReturn Pearson product-moment correlation coefficients.\n\nParameters\n----------\ndata : array_like\nA 2-D array containing multiple variables and observations. Each row of `data` represents a variable, and each column a single observation of all those variables.\n\nReturns\n-------\ntriu_corr : ndarray\nThe upper triangle of the correlation coefficient matrix of the variables.\n"},
+   "triu_corr = PearsonTriu(data, diagonal=False)"},
   {"Cluster", BlockCorr_Cluster, METH_VARARGS,
-   "labels = Cluster(data, alpha, kappa, max_nan)\n\n...\n"},
+   "labels = Cluster(data, alpha, kappa, max_nan)"},
   {"COREQ", BlockCorr_COREQ, METH_VARARGS,
-   "(labels, pivots, pivot_corr_triu, computations) = COREQ(data, alpha, estimation_strategy)\n\n...\n"},
+   "(labels, pivots, pivot_corr_triu, computations) = COREQ(data, alpha, estimation_strategy)"},
   {"Loss", BlockCorr_Loss, METH_VARARGS,
-   "(abs, sq, max, elems) = Loss(input_array, cluster_corr, membs, precomputed=False)\n\nIf precomputed is False (default), input_array is interpreted as a data matrix with N rows and D columns. Otherwise, it is interpreted as a triu correlation matrix of size N*(N+1)/2.\n"},
+   "(abs, sq, max, elems) = Loss(input_array, cluster_corr, membs, precomputed=False)"},
   {NULL, NULL, 0, NULL}
 };
 
 #if PY_MAJOR_VERSION >= 3
-  #define MOD_INIT(name) PyMODINIT_FUNC PyInit_##name(void)
-  #define MOD_SUCCESS_VAL(val) val
-  #define MOD_DEF(ob, name, doc, methods) \
-          static struct PyModuleDef moduledef = { \
-            PyModuleDef_HEAD_INIT, name, doc, -1, methods, }; \
-          ob = PyModule_Create(&moduledef);
-#else
-  #define MOD_INIT(name) void init##name(void)
-  #define MOD_SUCCESS_VAL(val)
-  #define MOD_DEF(ob, name, doc, methods) \
-          ob = Py_InitModule3(name, methods, doc);
+static struct PyModuleDef BlockCorr_module = {
+  PyModuleDef_HEAD_INIT,
+  "BlockCorr", // name
+  NULL,        // module documentation
+  -1,          // size of per-interpreter state of the module
+               // or -1 if the module keeps state in global variables.
+  BlockCorr_methods
+};
 #endif
 
-MOD_INIT(BlockCorr)
-{
-  PyObject *m;
-  MOD_DEF(m, "BlockCorr", "Block matrix estimation for correlation coefficients.",
-          BlockCorr_methods)
-  if (m == NULL)
-    return;
-  import_array(); // numpy import
-  if (PyModule_AddIntConstant(m, "ESTIMATE_PIVOT", COREQ_PIVOT))
-    return;
-  if (PyModule_AddIntConstant(m, "ESTIMATE_PIVOT_GUARANTEE", COREQ_PIVOT_GUARANTEE))
-    return;
-  if (PyModule_AddIntConstant(m, "ESTIMATE_AVERAGE", COREQ_AVERAGE))
-    return;
-  return MOD_SUCCESS_VAL(m);
-}
+#if PY_MAJOR_VERSION >= 3
+  #define MOD_INIT(name) PyMODINIT_FUNC PyInit_##name(void)
+  #define MOD_RETURN(val) return val
+#else
+  #define MOD_INIT(name) void init##name(void)
+  #define MOD_RETURN(val) return
+#endif
 
-int
-main(int argc, char **argv) {
-  Py_SetProgramName(argv[0]);
-  Py_Initialize();
-    PyImport_ImportModule("BlockCorr");
-  Py_Exit(0);
-  return 0;
+MOD_INIT(BlockCorr) {
+#if PY_MAJOR_VERSION < 3
+  PyObject *m = Py_InitModule("BlockCorr", BlockCorr_methods);
+#else
+  PyObject *m = PyModule_Create(&BlockCorr_module);
+#endif
+  if (m == NULL)
+    MOD_RETURN(NULL);
+
+  if (PyModule_AddIntConstant(m, "ESTIMATE_PIVOT", COREQ_PIVOT))
+    MOD_RETURN(NULL);
+  if (PyModule_AddIntConstant(m, "ESTIMATE_PIVOT_GUARANTEE", COREQ_PIVOT_GUARANTEE))
+    MOD_RETURN(NULL);
+  if (PyModule_AddIntConstant(m, "ESTIMATE_AVERAGE", COREQ_AVERAGE))
+    MOD_RETURN(NULL);
+
+  import_array(); // numpy import
+  MOD_RETURN(m);
 }
 

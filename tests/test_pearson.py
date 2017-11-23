@@ -2,7 +2,7 @@ from time import clock, time
 import numpy as np
 import BlockCorr
 
-n = 1000
+n = 5000
 r = np.random.random((n, n))
 
 u, s = clock(), time()
