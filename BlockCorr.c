@@ -25,38 +25,51 @@ double pearson2(const double *d, const long i, const long j, const long l) {
 
 // compute n-by-n correlation matrix for complete data set d with n rows and l columns
 double *pearson(const double *d, long n, long l) {
-  long int i, j, k;
   double *sums = (double *) calloc(n, sizeof (double));
   double *sumsqs = (double *) calloc(n, sizeof (double));
+  double *sqsums = (double *) calloc(n, sizeof (double));
   double *coef = (double *) calloc(n*n, sizeof (double));
-  if (!coef || !sums || !sumsqs) return NULL;
-  double sum_ij = 0.0;
+  if (!coef || !sums || !sumsqs || !sqsums) return NULL;
 
 #pragma omp parallel for
-  for (i = 0; i < n; i++) {
+  for (long i = 0; i < n; i++) {
 #pragma omp simd
-    for (k = 0; k < l; k++) {
+    for (long k = 0; k < l; k++) {
       sums[i] += d[i*l+k];
       sumsqs[i] += d[i*l+k]*d[i*l+k];
     }
   }
 
-#pragma omp parallel for collapse(2) private (sum_ij) schedule(dynamic)
-  for (i = 0; i < n; i++) {
-    for (j = 0; j < n; j++) {
-      if (i > j) continue;
-      sum_ij = 0.0;
 #pragma omp simd
-      for (k = 0; k < l; k++) {
-        sum_ij += d[i*l+k]*d[j*l+k];
-      }
-      coef[i*n+j] = (l*sum_ij-sums[i]*sums[j])/sqrt((l*sumsqs[i]-sums[i]*sums[i])*(l*sumsqs[j]-sums[j]*sums[j]));
-      coef[j*n+i] = coef[i*n+j];
+  for (long i = 0; i < n; i++) {
+    sqsums[i] = sums[i]*sums[i];
+  }
+
+#pragma omp parallel for
+  for (long ij = 0; ij < n*(n-1)/2; ij++) {
+    double sum_ij = 0.0;
+    long i = ij / n;
+    long j = ij % n;
+    if (j <= i) {
+      i = n - i - 2;
+      j = n - j - 1;
     }
+#pragma omp simd
+    for (long k = 0; k < l; k++) {
+      sum_ij += d[i*l+k]*d[j*l+k];
+    }
+    coef[i*n+j] = (l*sum_ij-sums[i]*sums[j])/sqrt((l*sumsqs[i]-sqsums[i])*(l*sumsqs[j]-sqsums[j]));
+    coef[j*n+i] = coef[i*n+j];
+  }
+
+#pragma omp simd
+  for (long i = 0; i < n; i++) {
+    coef[i*n+i] = 1.0;
   }
 
   free(sums);
   free(sumsqs);
+  free(sqsums);
   return coef;
 }
 
