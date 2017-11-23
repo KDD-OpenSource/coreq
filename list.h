@@ -48,29 +48,29 @@ double llist_double_front(llist_double *llist);
 //int llist_double_relink_all(llist_double *from, llist_double *to);
 
 
-// UNSIGNED LONG INT
+// LONG INT
 
-typedef struct llist_item_ul {
-  unsigned long data;
-  struct llist_item_ul *next;
-  struct llist_item_ul *prev;
-} llist_item_ul;
+typedef struct llist_item_li {
+  long int data;
+  struct llist_item_li *next;
+  struct llist_item_li *prev;
+} llist_item_li;
 
-typedef struct llist_ul {
-  llist_item_ul *first;
-  llist_item_ul *last;
+typedef struct llist_li {
+  llist_item_li *first;
+  llist_item_li *last;
   long int len;
-} llist_ul;
+} llist_li;
 
-int llist_ul_init(llist_ul *llist);
-void llist_ul_destroy(llist_ul *llist);
-void llist_ul_print(llist_ul *llist);
-int llist_ul_push_back(llist_ul *llist, unsigned long data);
-long int llist_ul_size(llist_ul *llist);
-unsigned long llist_ul_back(llist_ul *llist);
-unsigned long llist_ul_front(llist_ul *llist);
-int llist_ul_relink(llist_item_ul *item, llist_ul *from, llist_ul *to);
-int llist_ul_relink_all(llist_ul *from, llist_ul *to);
+int llist_li_init(llist_li *llist);
+void llist_li_destroy(llist_li *llist);
+void llist_li_print(llist_li *llist);
+int llist_li_push_back(llist_li *llist, long int data);
+long int llist_li_size(llist_li *llist);
+long int llist_li_back(llist_li *llist);
+long int llist_li_front(llist_li *llist);
+int llist_li_relink(llist_item_li *item, llist_li *from, llist_li *to);
+int llist_li_relink_all(llist_li *from, llist_li *to);
 
 
 // PTR

@@ -87,17 +87,17 @@ double llist_double_front(llist_double *llist) {
 }
 
 
-// UNSIGNED LONG
+// LONG INT
 
-int llist_ul_init(llist_ul *llist) {
+int llist_li_init(llist_li *llist) {
   llist->first = NULL;
   llist->last = NULL;
   llist->len = 0;
   return 0;
 }
 
-void llist_ul_destroy(llist_ul *llist) {
-  llist_item_ul *cur, *prev;
+void llist_li_destroy(llist_li *llist) {
+  llist_item_li *cur, *prev;
   cur = llist->first;
   while (cur != NULL) {
     prev = cur;
@@ -107,8 +107,8 @@ void llist_ul_destroy(llist_ul *llist) {
   llist->len = 0;
 }
 
-void llist_ul_print(llist_ul *llist) {
-  llist_item_ul *cur;
+void llist_li_print(llist_li *llist) {
+  llist_item_li *cur;
   cur = llist->first;
   while (cur != NULL) {
     printf("%lu ", cur->data);
@@ -117,8 +117,8 @@ void llist_ul_print(llist_ul *llist) {
   printf("\n");
 }
 
-int llist_ul_push_back(llist_ul *llist, unsigned long data) {
-  llist_item_ul *new_item = (llist_item_ul *) malloc(sizeof(llist_item_ul));
+int llist_li_push_back(llist_li *llist, long int data) {
+  llist_item_li *new_item = (llist_item_li *) malloc(sizeof(llist_item_li));
   if (new_item == NULL) {
     return 1;
   }
@@ -138,22 +138,22 @@ int llist_ul_push_back(llist_ul *llist, unsigned long data) {
   return 0;
 }
 
-long int llist_ul_size(llist_ul *llist) {
+long int llist_li_size(llist_li *llist) {
   return llist->len;
 }
 
-unsigned long llist_ul_back(llist_ul *llist) {
+long int llist_li_back(llist_li *llist) {
   return llist->last->data;
 }
 
-unsigned long llist_ul_front(llist_ul *llist) {
+long int llist_li_front(llist_li *llist) {
   return llist->first->data;
 }
 
 // remove item from its current list (position) and move to back of another list
-int llist_ul_relink(llist_item_ul *item, llist_ul *from, llist_ul *to) {
-  llist_item_ul *pred;
-  llist_item_ul *succ;
+int llist_li_relink(llist_item_li *item, llist_li *from, llist_li *to) {
+  llist_item_li *pred;
+  llist_item_li *succ;
 
   if ((item == NULL) || (from->len == 0))
     return 1;
@@ -190,7 +190,7 @@ int llist_ul_relink(llist_item_ul *item, llist_ul *from, llist_ul *to) {
 }
 
 // append all items from a given list to the end of another list
-int llist_ul_relink_all(llist_ul *from, llist_ul *to) {
+int llist_li_relink_all(llist_li *from, llist_li *to) {
   if (from->first == NULL) {
     // source is empty
     return 0;
