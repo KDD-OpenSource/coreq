@@ -291,6 +291,7 @@ coreq(const double *d, long int n, long int l, double alpha, coreq_estimation_st
   // precompute some data statistics for fast correlation computation
   double *sums = (double *) calloc(n, sizeof (double));
   double *sumsqs = (double *) calloc(n, sizeof (double));
+  if ((!sums) || (!sumsqs)) return NULL;
 #pragma omp parallel for
   for (i = 0; i < n; i++) {
 #pragma omp simd
@@ -422,6 +423,7 @@ coreq(const double *d, long int n, long int l, double alpha, coreq_estimation_st
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = 0.5*(1.0+alpha*alpha) * ((double *) iter_val->data)[rpos];
           break;
         case COREQ_AVERAGE:
+        default:
           // sample log2(N_k) precomputed correlations and use average as estimate
           sample_size = fmax(1,ceil(log2(cluster_size_arr[j])));
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] = 0;
@@ -432,9 +434,6 @@ coreq(const double *d, long int n, long int l, double alpha, coreq_estimation_st
             (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] += ((double *) iter_val->data)[rpos];
           }
           (*cluster_corrs)[i*(*n_clus)-i*(i+1)/2+j] /= sample_size;
-          break;
-        default:
-          return NULL;
       }
     }
 
@@ -495,7 +494,7 @@ compute_loss(const double *d, const double *corr_triu, const double *corr_clus_t
   int abort = 0;
 
   if ((d == NULL) && (corr_triu == NULL)) {
-    return 0;
+    return -1;
   }
 
   #pragma omp parallel for private(i, j, corr_tru, corr_est, ii, jj) \
@@ -540,13 +539,13 @@ compute_loss(const double *d, const double *corr_triu, const double *corr_clus_t
     }
   }
   if (abort) {
-      return 0;
+      return -2;
   }
 
   *loss_abs = loss_abs0;
   *loss_sq = loss_sq0;
   *loss_max = loss_max0;
   *elements = elements0;
-  return 1;
+  return 0;
 }
 

@@ -1,6 +1,6 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include "BlockCorr.h"
 #include "Python.h"
+#include "BlockCorr.h"
 #include "numpy/arrayobject.h"
 
 static PyObject *
@@ -40,13 +40,13 @@ BlockCorr_Loss(PyObject *self, PyObject* args) {
   }
 
   if (precomputed) {
-    success = compute_loss(NULL, (double *)PyArray_DATA(input_arr), (double *)PyArray_DATA(cluster_corr),
-                  (long int *)PyArray_DATA(membs),
+    success = compute_loss(NULL, (double *) PyArray_DATA(input_arr), (double *) PyArray_DATA(cluster_corr),
+                  (long int *) PyArray_DATA(membs),
                   PyArray_DIM(membs, 0), 0, -1/2.+sqrt(1/4.+2.*PyArray_DIM(cluster_corr, 0)),
                   &loss_abs, &loss_sq, &loss_max, &elements);
   } else {
-    success = compute_loss((double *)PyArray_DATA(input_arr), NULL, (double *)PyArray_DATA(cluster_corr),
-                  (long int *)PyArray_DATA(membs),
+    success = compute_loss((double *) PyArray_DATA(input_arr), NULL, (double *) PyArray_DATA(cluster_corr),
+                  (long int *) PyArray_DATA(membs),
                   PyArray_DIM(membs, 0), PyArray_DIM(input_arr, 1), -1/2.+sqrt(1/4.+2.*PyArray_DIM(cluster_corr, 0)),
                   &loss_abs, &loss_sq, &loss_max, &elements);
   }
@@ -55,10 +55,17 @@ BlockCorr_Loss(PyObject *self, PyObject* args) {
   Py_DECREF(cluster_corr);
   Py_DECREF(membs);
 
-  if (success) {
-    return Py_BuildValue("dddl", loss_abs, loss_sq, loss_max, elements);
-  } else {
-    Py_RETURN_NONE;
+  switch (success) {
+    case 0:
+      return Py_BuildValue("dddl", loss_abs, loss_sq, loss_max, elements);
+    case -1:
+      PyErr_SetString(PyExc_ValueError, "Specify either the input data or a precomputed correlation matrix");
+      return NULL;
+    case -2:
+      PyErr_SetString(PyExc_ValueError, "Invalid cluster id in membership vector, range [0...K]?");
+      return NULL;
+    default:
+      return NULL;
   }
 }
 
@@ -68,21 +75,24 @@ BlockCorr_Pearson(PyObject *self, PyObject* args) {
   PyArrayObject *data, *coef_arr;
   double *coef;
 
-  if(!PyArg_ParseTuple(args, "O", &arg))
+  if (!PyArg_ParseTuple(args, "O", &arg))
     return NULL;
   data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
     NPY_DOUBLE, 2, 2);
-  if(!data)
+  if (!data)
     return NULL;
 
-  coef = pearson((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1));
-  if (!coef)
+  coef = pearson((double *) PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1));
+  if (!coef) {
+    PyErr_SetString(PyExc_MemoryError, "Cannot allocate memory for correlation matrix");
+    Py_DECREF(data);
     return NULL;
+  }
 
   long int dims[2] = {PyArray_DIM(data, 0), PyArray_DIM(data, 0)};
   coef_arr = (PyArrayObject *) PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, coef);
   if (!coef_arr) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array.");
+      Py_DECREF(data);
       return NULL;
   }
 
@@ -103,15 +113,18 @@ BlockCorr_PearsonTriu(PyObject *self, PyObject* args) {
   if (!data)
     return NULL;
 
-  coef = pearson_triu((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1));
-  if (!coef)
+  coef = pearson_triu((double *) PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1));
+  if (!coef) {
+    PyErr_SetString(PyExc_MemoryError, "Cannot allocate memory for correlation matrix");
+    Py_DECREF(data);
     return NULL;
+  }
 
   long int dims[1] = {PyArray_DIM(data, 0)*(PyArray_DIM(data, 0)+1)/2};
   coef_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, dims, NPY_DOUBLE, coef);
   if (!coef_arr) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array.");
-      return NULL;
+    Py_DECREF(data);
+    return NULL;
   }
 
   Py_DECREF(data);
@@ -126,21 +139,26 @@ BlockCorr_Cluster(PyObject *self, PyObject* args) {
   long kappa, max_nan;
   long *clus;
 
-  if(!PyArg_ParseTuple(args, "Odll", &arg, &alpha, &kappa, &max_nan))
+  if (!PyArg_ParseTuple(args, "Odll", &arg, &alpha, &kappa, &max_nan))
     return NULL;
   data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
     NPY_DOUBLE, 2, 2);
-  if(!data)
+  if (!data)
     return NULL;
 
   clus = cluster((double *)PyArray_DATA(data), PyArray_DIM(data, 0), PyArray_DIM(data, 1),
       alpha, kappa, max_nan);
+  if (!clus) {
+    PyErr_SetString(PyExc_MemoryError, "Cannot allocate memory for clustering");
+    Py_DECREF(data);
+    return NULL;
+  }
 
   long int dims[1] = {PyArray_DIM(data, 0)};
   clus_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, dims, NPY_LONG, clus);
   if (!clus_arr) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array.");
-      return NULL;
+    Py_DECREF(data);
+    return NULL;
   }
 
   Py_DECREF(data);
@@ -158,41 +176,40 @@ BlockCorr_COREQ(PyObject *self, PyObject* args) {
   long n, l;
   coreq_estimation_strategy_t est_strat;
 
-  if(!PyArg_ParseTuple(args, "Oid", &arg, &est_strat, &alpha))
+  if (!PyArg_ParseTuple(args, "Oid", &arg, &est_strat, &alpha))
     return NULL;
 
-  // run COREQ
-  data = (PyArrayObject *) PyArray_ContiguousFromObject(arg,
-    NPY_DOUBLE, 2, 2);
+  data = (PyArrayObject *) PyArray_ContiguousFromObject(arg, NPY_DOUBLE, 2, 2);
   if (!data) return NULL;
   n = PyArray_DIM(data, 0);
   l = PyArray_DIM(data, 1);
   if (!coreq((double *)PyArray_DATA(data), n, l, alpha, est_strat, &membs, &pivots, &cluster_corrs, &n_clus, &corr_comps)) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create output array.");
-      return NULL;
+    PyErr_SetString(PyExc_MemoryError, "Cannot allocate memory for clustering");
+    Py_DECREF(data);
+    return NULL;
   }
   Py_DECREF(data);
 
   // prepare Python output (cluster assignments)
   membs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, (long int *) &n, NPY_LONG, membs);
   if (!membs_arr) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (memberships).");
-      return NULL;
+    Py_DECREF(data);
+    return NULL;
   }
 
   // prepare Python output (pivot choices)
   pivots_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_clus, NPY_LONG, pivots);
   if (!pivots_arr) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (pivots).");
-      return NULL;
+    Py_DECREF(data);
+    return NULL;
   }
 
   // prepare Python output (cluster correlations)
   n_corrs = n_clus*(n_clus+1)/2;
   cluster_corrs_arr = (PyArrayObject *) PyArray_SimpleNewFromData(1, &n_corrs, NPY_DOUBLE, cluster_corrs);
   if (!pivots_arr) {
-      PyErr_SetString(PyExc_MemoryError, "Cannot create Python reference to output array (correlations).");
-      return NULL;
+    Py_DECREF(data);
+    return NULL;
   }
 
   return Py_BuildValue("OOOl", (PyObject *) membs_arr, (PyObject *) pivots_arr, (PyObject *) cluster_corrs_arr, corr_comps);
