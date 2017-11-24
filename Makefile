@@ -7,8 +7,7 @@ install:
 	sudo python3 setup.py install
 
 clean:
-	python2 setup.py clean
-	python3 setup.py clean
+	rm -rf build/
 
 gfz:
 	python setup.py build
