@@ -223,7 +223,7 @@ static PyMethodDef BlockCorr_methods[] = {
   {"Cluster", BlockCorr_Cluster, METH_VARARGS,
    "labels = Cluster(data, alpha, kappa, max_nan)"},
   {"COREQ", BlockCorr_COREQ, METH_VARARGS,
-   "(labels, pivots, pivot_corr_triu, computations) = COREQ(data, alpha, estimation_strategy)"},
+   "(labels, pivots, pivot_corr_triu, computations) = COREQ(data, estimation_strategy, alpha)"},
   {"Loss", BlockCorr_Loss, METH_VARARGS,
    "(abs, sq, max, elems) = Loss(input_array, cluster_corr, membs, precomputed=False)"},
   {NULL, NULL, 0, NULL}
