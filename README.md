@@ -27,13 +27,15 @@ Example: A dataset of 1000 time series (length 50) that consists of two perfectl
 >>> np.random.seed(0)
 >>> X = np.random.permutation(np.concatenate((np.repeat(np.random.randn(1, 50), 700, axis=0),
             np.repeat(np.random.randn(1, 50), 300, axis=0))))
+>>> X.shape
+(1000, 50)
 >>> alpha = 0.8
 >>> labels, pivots, pivot_corr_triu, computations = BlockCorr.COREQ(X, BlockCorr.ESTIMATE_AVERAGE, alpha)
 clustering finished with 1300 correlation computations --- 2 clusters detected
 >>> pivot_corr_triu
 array([ 1.        , -0.05918059,  1.        ])
 ```
-The vector `pivot_corr_triu` contains the upper triangular part of the pivot correlations matrix.
+The vector `pivot_corr_triu` contains the upper triangular part of the pivot correlation matrix.
 
 ## License
 The code is released under the MIT license.
