@@ -44,7 +44,7 @@ array([ 1.        , -0.05918059,  1.        ])
 >>> cluster_matrix = np.zeros((X.shape[0], len(pivots)))
 >>> cluster_matrix[range(0,len(labels)), labels] = 1
 >>> R = cluster_matrix.dot(pivot_corr).dot(cluster_matrix.transpose())
->>> np.abs((cluster_matrix.dot(pivot_corr).dot(cluster_matrix.transpose()) - np.corrcoef(X))).sum()
+>>> np.abs(R - np.corrcoef(X)).sum()
 0.0
 ```
 
