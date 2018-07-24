@@ -34,8 +34,19 @@ Example: A dataset of 1000 time series (length 50) that consists of two perfectl
 clustering finished with 1300 correlation computations --- 2 clusters detected
 >>> pivot_corr_triu
 array([ 1.        , -0.05918059,  1.        ])
+
+>>> # full pivot correlation matrix:
+>>> pivot_corr = np.zeros((len(pivots), len(pivots)))
+>>> pivot_corr[np.triu_indices(len(pivots))] = pivot_corr_triu
+>>> pivot_corr[np.tril_indices(len(pivots))] = pivot_corr_triu
+
+>>> # full time series correlation matrix:
+>>> cluster_matrix = np.zeros((X.shape[0], len(pivots)))
+>>> cluster_matrix[range(0,len(labels)), labels] = 1
+>>> R = cluster_matrix.dot(pivot_corr).dot(cluster_matrix.transpose())
+>>> np.abs(R - np.corrcoef(X)).sum()
+0.0
 ```
-The vector `pivot_corr_triu` contains the upper triangular part of the pivot correlation matrix.
 
 ## License
 The code is released under the MIT license.
