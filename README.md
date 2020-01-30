@@ -4,7 +4,7 @@ An implementation of the COREQ (CORrelation EQuivalence) algorithm to compute lo
 Erik Scharwächter, Fabian Geier, Lukas Faber, Emmanuel Müller. **Low Redundancy Estimation of Correlation Matrices for Time Series using Triangular Bounds.** In: *Proceedings of the 22nd Pacific-Asia Conference on Knowledge Discovery and Data Mining (PAKDD)*, 2018.
 
 ## Contact and citation
-* Corresponding author: Erik Scharwächter <erik.scharwaechter@hpi.de>
+* Corresponding author: [Erik Scharwächter](mailto:scharwaechter@bit.uni-bonn.de)
 * Please cite our paper if you use or modify our code for your own work.
 
 ## Description
